@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "staging" ]
+  pull_request:
+    branches: [ "main", "staging" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+
+    - name: Install Dependencies (Root)
+      run: npm install
+
+    # Contracts Testing
+    - name: Install Contracts Dependencies
+      run: npm install --prefix packages/contracts
+
+    - name: Compile Contracts
+      run: npx hardhat compile
+      working-directory: ./packages/contracts
+
+    - name: Test Contracts
+      run: npx hardhat test
+      working-directory: ./packages/contracts
+
+    # Web Build
+    - name: Install Web Dependencies
+      run: npm install --prefix apps/web
+
+    - name: Build Web
+      run: npm run build --prefix apps/web
+      env:
+        NEXT_TELEMETRY_DISABLED: 1
+
+    # API Build
+    - name: Install API Dependencies
+      run: npm install --prefix apps/api
+
+    - name: Build API
+      run: npm run build --prefix apps/api

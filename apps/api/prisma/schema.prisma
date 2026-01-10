@@ -1,0 +1,89 @@
+// apps/api/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  address   String   @unique
+  username  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  trades    Trade[]
+  positions Position[]
+  comments  Comment[]
+}
+
+model Market {
+  id          Int      @id @default(autoincrement())
+  slug        String?  @unique
+  question    String
+  description String?
+  category    String
+  image       String?
+  
+  volume      Decimal  @default(0) @db.Decimal(20, 2)
+  chance      Float    @default(50)
+  
+  endDate     DateTime?
+  resolved    Boolean  @default(false)
+  outcome     String?   // "YES", "NO" if resolved
+  
+  trades      Trade[]
+  positions   Position[]
+  comments    Comment[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Trade {
+  id        String   @id @default(uuid())
+  type      String   // "BUY" or "SELL"
+  outcome   String   // "YES" or "NO"
+  amount    Decimal  @db.Decimal(20, 2)
+  price     Float
+  shares    Decimal  @db.Decimal(20, 2)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  marketId  Int
+  market    Market   @relation(fields: [marketId], references: [id])
+  
+  createdAt DateTime @default(now())
+}
+
+model Position {
+  id        String   @id @default(uuid())
+  outcome   String   // "YES" or "NO"
+  shares    Decimal  @db.Decimal(20, 2)
+  avgPrice  Float
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  marketId  Int
+  market    Market   @relation(fields: [marketId], references: [id])
+
+  @@unique([userId, marketId, outcome])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  createdAt DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  marketId  Int
+  market    Market   @relation(fields: [marketId], references: [id])
+}
