@@ -1,19 +1,30 @@
 const hre = require("hardhat");
 
 async function main() {
-    console.log("Deploying PolybetMarket...");
+    console.log("Starting deployment...");
 
-    // Mock Addresses for Sandbox/Testnet if mainnet addresses aren't available
-    // In production, these should be the actual Gnosis CTF and USDC addresses
-    const CONDITIONAL_TOKENS_ADDRESS = "0xCeAfDD6ce04303357f53AC1239148Ff6107a9C75"; // Example Amoy address
-    const COLLATERAL_TOKEN_ADDRESS = "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582"; // Example Mock USDC
+    // 1. Deploy Mock USDC
+    const MockUSDC = await hre.ethers.getContractFactory("MockUSDC");
+    const usdc = await MockUSDC.deploy();
+    await usdc.waitForDeployment();
+    const usdcAddress = await usdc.getAddress();
 
+    console.log(`MockUSDC deployed to: ${usdcAddress}`);
+
+    // 2. Deploy PolybetMarket
     const PolybetMarket = await hre.ethers.getContractFactory("PolybetMarket");
-    const market = await PolybetMarket.deploy(CONDITIONAL_TOKENS_ADDRESS, COLLATERAL_TOKEN_ADDRESS);
-
+    // Market needs USDC address in constructor
+    const market = await PolybetMarket.deploy(usdcAddress);
     await market.waitForDeployment();
+    const marketAddress = await market.getAddress();
 
-    console.log(`PolybetMarket deployed to: ${await market.getAddress()}`);
+    console.log(`PolybetMarket deployed to: ${marketAddress}`);
+
+    // 3. Setup Initial State (Optional)
+    // Approve Market to spend admin's USDC?
+    // Create a test market?
+
+    console.log("Deployment complete!");
 }
 
 main().catch((error) => {

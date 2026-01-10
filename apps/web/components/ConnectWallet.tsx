@@ -4,8 +4,6 @@ import { useEffect } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { toast } from "react-hot-toast";
-import { useAccount } from "wagmi";
-import { toast } from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 
 export const ConnectWallet = () => {
