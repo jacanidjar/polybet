@@ -32,6 +32,7 @@ interface Position {
     pnl: number;
     pnlPercent: number;
     marketResolved: boolean;
+    marketWinner: string | null;
 }
 
 // Utility to generate a beautiful gradient based on wallet address
@@ -101,7 +102,8 @@ export default function PortfolioPage() {
                     currentValue,
                     pnl,
                     pnlPercent,
-                    marketResolved: p.market?.resolved || false
+                    marketResolved: p.market?.resolved || false,
+                    marketWinner: p.market?.outcome || null // Map winner from backend
                 };
             });
 
@@ -124,9 +126,28 @@ export default function PortfolioPage() {
 
     const handleResolve = async (position: Position) => {
         if (!user) return;
+
+        // Debug Feature: Ask user who won
+        const winner = prompt("Who won? Type 'YES' or 'NO'", "YES")?.toUpperCase();
+        if (winner !== 'YES' && winner !== 'NO') return;
+
+        const outcomeIndex = winner === 'YES' ? 1 : 2;
+
         try {
-            await resolve(position.marketId, 1); // Force Resolve to YES for testing
-            toast.success("Market Resolved to YES! 👨‍⚖️");
+            // 1. Resolve on blockchain
+            await resolve(position.marketId, outcomeIndex);
+
+            // 2. Update backend to mark market as resolved
+            await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resolved: true, winner: winner })
+            });
+
+            toast.success(`Market Resolved to ${winner}! 👨‍⚖️`);
+
+            // 3. Refresh portfolio to enable Claim button
+            fetchPortfolio();
         } catch (error) {
             console.error(error);
             toast.error("Failed to resolve market");
@@ -139,9 +160,13 @@ export default function PortfolioPage() {
             await claim(position.marketId);
             toast.success("Winnings Claimed! 🏆");
 
+            // Immediately update balance and portfolio
+            refetchBalance();
+
             // Wait a moment for indexed data updates or refetch immediately
             setTimeout(() => {
                 fetchPortfolio();
+                refetchBalance(); // Check again to be sure
             }, 2000);
 
         } catch (error) {
@@ -158,7 +183,7 @@ export default function PortfolioPage() {
         try {
             // 1. Sell on Blockchain
             const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
-            const sharesBigInt = BigInt(Math.floor(position.shares)); // Ensure integer
+            const sharesBigInt = BigInt(Math.floor(position.shares * 1e18)); // Shares stored with 18 decimals
 
             const hash = await sell(position.marketId, outcomeIndex, sharesBigInt);
             // Optionally wait for receipt usage if needed, but await sell() waits for signature? 
@@ -447,32 +472,41 @@ export default function PortfolioPage() {
                                                         </td>
                                                         <td className="pr-6 py-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <div className="flex justify-end gap-2">
-                                                                <button
-                                                                    onClick={() => handleClaim(p)}
-                                                                    disabled={!p.marketResolved}
-                                                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${p.marketResolved
-                                                                            ? 'bg-green-600 hover:bg-green-500 text-white'
-                                                                            : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed'
-                                                                        }`}
-                                                                    title={p.marketResolved ? "Claim winnings" : "Market not resolved yet"}
-                                                                >
-                                                                    Claim
-                                                                </button>
-                                                                {/* Debug: Resolve Button */}
-                                                                <button
-                                                                    onClick={() => handleResolve(p)}
-                                                                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
-                                                                    title="Debug: Resolve Market to YES"
-                                                                >
-                                                                    Resolve
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleSell(p)}
-                                                                    disabled={sellingId === p.id}
-                                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
-                                                                >
-                                                                    {sellingId === p.id ? 'Selling...' : 'Sell'}
-                                                                </button>
+                                                                {p.marketResolved ? (
+                                                                    <>
+                                                                        {p.marketWinner === p.outcome ? (
+                                                                            <button
+                                                                                onClick={() => handleClaim(p)}
+                                                                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold shadow-sm animate-pulse"
+                                                                                title="Market resolved in your favor! Claim winnings."
+                                                                            >
+                                                                                Claim Winnings 🏆
+                                                                            </button>
+                                                                        ) : (
+                                                                            <span className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-lg text-xs font-bold border border-zinc-200 dark:border-zinc-700 cursor-not-allowed">
+                                                                                ❌ Lost
+                                                                            </span>
+                                                                        )}
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        {/* Active Market Actions */}
+                                                                        <button
+                                                                            onClick={() => handleResolve(p)}
+                                                                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
+                                                                            title="Debug: Resolve Market to YES"
+                                                                        >
+                                                                            Resolve
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleSell(p)}
+                                                                            disabled={sellingId === p.id}
+                                                                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                                                                        >
+                                                                            {sellingId === p.id ? 'Selling...' : 'Sell'}
+                                                                        </button>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </td>
                                                     </tr>

@@ -55,4 +55,11 @@ export class MarketsService {
         }
         return { message: 'Seeded successfully' };
     }
+
+    async resolveMarket(id: number, winner: string) {
+        return this.prisma.market.update({
+            where: { id },
+            data: { resolved: true }
+        });
+    }
 }

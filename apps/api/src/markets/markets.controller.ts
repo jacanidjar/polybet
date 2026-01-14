@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query } from '@nestjs/common';
 import { MarketsService } from './markets.service';
 
 @Controller('markets')
@@ -19,5 +19,11 @@ export class MarketsController {
     @Post('seed')
     async seed() {
         return this.marketsService.seed();
+    }
+
+    // Resolve market (sync blockchain -> backend)
+    @Patch(':id/resolve')
+    async resolveMarket(@Param('id') id: string, @Body() body: { resolved: boolean; winner: string }) {
+        return this.marketsService.resolveMarket(Number(id), body.winner);
     }
 }

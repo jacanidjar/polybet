@@ -29,21 +29,27 @@ async function main() {
     console.log("Approved market to spend USDC");
 
     const currentTimestamp = Math.floor(Date.now() / 1000);
+    const defaultEndTime = currentTimestamp + 86400 * 30; // 30 days from now
 
-    // Market 1: Bitcoin (Matches seed.ts)
-    const endTime1 = Math.floor(new Date('2024-12-31T23:59:59Z').getTime() / 1000);
-    // Use fallback if date passed, just 30 days in future for testing
-    const validEndTime1 = endTime1 > currentTimestamp ? endTime1 : currentTimestamp + 86400 * 30;
+    // All 10 markets matching backend seed (markets.service.ts)
+    const MARKETS = [
+        "Will Trump win the 2024 Election?",           // Market #1 - Politics
+        "Bitcoin to hit $100k in 2024?",               // Market #2 - Crypto
+        "Fed to cut rates in March?",                  // Market #3 - Business
+        "SpaceX Starship launch successful?",          // Market #4 - Science
+        "Lakers to win NBA Championship?",             // Market #5 - Sports
+        "Taylor Swift to release new album in 2024?", // Market #6 - Pop Culture
+        "Ethereum to flip Bitcoin market cap?",        // Market #7 - Crypto
+        "Will AI replace 50% of jobs by 2030?",        // Market #8 - Science
+        "Apple to release AR glasses in 2024?",        // Market #9 - Business
+        "World Cup final to go to penalties?",         // Market #10 - Sports
+    ];
 
-    await (await market.createMarket("Bitcoin to hit $100k by 2024?", validEndTime1, initialLiquidity)).wait();
-    console.log("Market #1 (Bitcoin) created!");
+    for (let i = 0; i < MARKETS.length; i++) {
+        await (await market.createMarket(MARKETS[i], defaultEndTime, initialLiquidity)).wait();
+        console.log(`Market #${i + 1} created: ${MARKETS[i]}`);
+    }
 
-    // Market 2: Fed Rate Cut (Matches seed.ts)
-    const endTime2 = Math.floor(new Date('2024-03-31T23:59:59Z').getTime() / 1000);
-    const validEndTime2 = endTime2 > currentTimestamp ? endTime2 : currentTimestamp + 86400 * 30;
-
-    await (await market.createMarket("Fed to cut rates in March?", validEndTime2, initialLiquidity)).wait();
-    console.log("Market #2 (Fed) created!");
 
     // Save to frontend file
     const fs = require("fs");
