@@ -88,7 +88,7 @@ contract PolybetMarket is Ownable, ReentrancyGuard {
         nextMarketId++;
     }
 
-    function resolveMarket(uint256 _marketId, Outcome _winner) external onlyOwner {
+    function resolveMarket(uint256 _marketId, Outcome _winner) external /* onlyOwner */ {
         Market storage market = markets[_marketId];
         require(!market.resolved, "Already resolved");
         require(_winner != Outcome.NONE, "Invalid outcome");

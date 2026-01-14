@@ -30,3 +30,6 @@ Status: In Progress
         - [x] Show User Balance in Portfolio UI <!-- id: 25 -->
         - [x] **New: Claim Winnings** (Redeem Feature) <!-- id: 26 -->
         - [x] **UI Polish: Header Redesign** (Polymarket Style) <!-- id: 27 -->
+        - [x] **User Menu & Profile Link** <!-- id: 28 -->
+        - [x] **Balance Protection & Loading States** <!-- id: 29 -->
+        - [x] **Market Resolution Debug Tool** <!-- id: 30 -->

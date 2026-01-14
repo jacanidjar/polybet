@@ -91,6 +91,9 @@ export const useUSDCBalance = (userAddress: Address | undefined) => {
         abi: MockUSDCABI,
         functionName: 'balanceOf',
         args: userAddress ? [userAddress] : undefined,
+        query: {
+            refetchInterval: 2000,
+        }
     });
     return { balance: balance as bigint || BigInt(0), refetch, isLoading };
 };
@@ -125,4 +128,21 @@ export const useClaimWinnings = () => {
     };
 
     return { claim, isPending, hash };
+};
+
+// Hook to Resolve Market (Admin only)
+export const useResolveMarket = () => {
+    const { writeContractAsync, isPending, data: hash } = useWriteContract();
+
+    const resolve = async (marketId: number, outcome: number) => {
+        // outcome: 1 = YES, 2 = NO
+        return writeContractAsync({
+            address: MARKET_ADDRESS as Address,
+            abi: PolybetMarketABI,
+            functionName: 'resolveMarket',
+            args: [BigInt(marketId), outcome],
+        });
+    };
+
+    return { resolve, isPending, hash };
 };

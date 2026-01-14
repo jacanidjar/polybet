@@ -2,12 +2,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { type Address } from 'viem';
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/Header";
 import { EmptyState } from "@/components/EmptyState";
 import { TrendingUp, TrendingDown, Wallet, Search, Filter, ExternalLink, Calendar, Edit2, Share2 } from "lucide-react";
 import { toast } from '@/lib/toast';
-import { useSellShares, useUSDCBalance, useClaimWinnings } from '@/hooks/useContracts';
+import { useSellShares, useUSDCBalance, useClaimWinnings, useResolveMarket } from '@/hooks/useContracts';
 import {
     AreaChart,
     Area,
@@ -30,6 +31,7 @@ interface Position {
     currentValue: number;
     pnl: number;
     pnlPercent: number;
+    marketResolved: boolean;
 }
 
 // Utility to generate a beautiful gradient based on wallet address
@@ -98,7 +100,8 @@ export default function PortfolioPage() {
                     invested,
                     currentValue,
                     pnl,
-                    pnlPercent
+                    pnlPercent,
+                    marketResolved: p.market?.resolved || false
                 };
             });
 
@@ -116,6 +119,19 @@ export default function PortfolioPage() {
 
     const { sell } = useSellShares();
     const { claim } = useClaimWinnings();
+    const { resolve } = useResolveMarket();
+    const { refetch: refetchBalance } = useUSDCBalance(user?.address as Address);
+
+    const handleResolve = async (position: Position) => {
+        if (!user) return;
+        try {
+            await resolve(position.marketId, 1); // Force Resolve to YES for testing
+            toast.success("Market Resolved to YES! 👨‍⚖️");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to resolve market");
+        }
+    };
 
     const handleClaim = async (position: Position) => {
         if (!user) return;
@@ -167,8 +183,10 @@ export default function PortfolioPage() {
             });
 
             if (!res.ok) throw new Error("Failed to sell");
+            if (!res.ok) throw new Error("Failed to sell");
             toast.success("Position sold & Funds returned! 💸");
             fetchPortfolio();
+            refetchBalance(); // Ensure cash updates immediately
         } catch (error) {
             console.error(error);
             toast.error("Failed to sell on-chain");
@@ -431,10 +449,22 @@ export default function PortfolioPage() {
                                                             <div className="flex justify-end gap-2">
                                                                 <button
                                                                     onClick={() => handleClaim(p)}
-                                                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold"
-                                                                    title="Claim winnings"
+                                                                    disabled={!p.marketResolved}
+                                                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${p.marketResolved
+                                                                            ? 'bg-green-600 hover:bg-green-500 text-white'
+                                                                            : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed'
+                                                                        }`}
+                                                                    title={p.marketResolved ? "Claim winnings" : "Market not resolved yet"}
                                                                 >
                                                                     Claim
+                                                                </button>
+                                                                {/* Debug: Resolve Button */}
+                                                                <button
+                                                                    onClick={() => handleResolve(p)}
+                                                                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
+                                                                    title="Debug: Resolve Market to YES"
+                                                                >
+                                                                    Resolve
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleSell(p)}

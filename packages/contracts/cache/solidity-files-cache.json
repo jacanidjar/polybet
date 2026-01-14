@@ -268,8 +268,8 @@
       ]
     },
     "D:\\user\\Desktop\\polybet\\packages\\contracts\\contracts\\PolybetMarket.sol": {
-      "lastModificationDate": 1768074817098,
-      "contentHash": "cf9b3e2c41c9ce7a21026462727ddad4",
+      "lastModificationDate": 1768372855436,
+      "contentHash": "d6dda20037c56d7de121dd730bdf0f81",
       "sourceName": "contracts/PolybetMarket.sol",
       "solcConfig": {
         "version": "0.8.20",
