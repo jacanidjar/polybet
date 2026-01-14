@@ -5,8 +5,10 @@ import MockUSDCABI from '@/lib/contracts/MockUSDC.json';
 
 // Configuration
 // TODO: Replace with env vars or deployed output
-const MARKET_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
-const USDC_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Localhost default
+import CONTRACT_CONFIG from '@/lib/contracts-config.json';
+
+const MARKET_ADDRESS = CONTRACT_CONFIG.MARKET_ADDRESS;
+const USDC_ADDRESS = CONTRACT_CONFIG.USDC_ADDRESS;
 
 export const useMarketContract = () => {
     return {
@@ -30,7 +32,7 @@ export const useCheckAllowance = (userAddress: Address | undefined) => {
         functionName: 'allowance',
         args: userAddress ? [userAddress, MARKET_ADDRESS] : undefined,
     });
-    return { allowance: allowance as bigint || 0n, refetch };
+    return { allowance: allowance as bigint || BigInt(0), refetch };
 };
 
 // Hook to approve spending
@@ -84,13 +86,13 @@ export const useSellShares = () => {
 
 // Hook to check USDC Balance
 export const useUSDCBalance = (userAddress: Address | undefined) => {
-    const { data: balance, refetch } = useReadContract({
+    const { data: balance, refetch, isLoading } = useReadContract({
         address: USDC_ADDRESS as Address,
         abi: MockUSDCABI,
         functionName: 'balanceOf',
         args: userAddress ? [userAddress] : undefined,
     });
-    return { balance: balance as bigint || 0n, refetch };
+    return { balance: balance as bigint || BigInt(0), refetch, isLoading };
 };
 
 // Hook to Mint Fake USDC
@@ -107,4 +109,20 @@ export const useMintUSDC = () => {
     };
 
     return { mint, isPending, hash };
+};
+
+// Hook to Claim Winnings
+export const useClaimWinnings = () => {
+    const { writeContractAsync, isPending, data: hash } = useWriteContract();
+
+    const claim = async (marketId: number) => {
+        return writeContractAsync({
+            address: MARKET_ADDRESS as Address,
+            abi: PolybetMarketABI,
+            functionName: 'claimWinnings',
+            args: [BigInt(marketId)],
+        });
+    };
+
+    return { claim, isPending, hash };
 };

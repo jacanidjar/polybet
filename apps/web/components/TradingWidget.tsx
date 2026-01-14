@@ -25,8 +25,11 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
     const [amount, setAmount] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Mock state for TEST_MODE
+    const [testBalance, setTestBalance] = useState(1000);
+
     // Real Crypto Balance
-    const { balance } = useUSDCBalance(address);
+    const { balance, refetch: refetchBalance, isLoading } = useUSDCBalance(address);
     const balanceNum = parseFloat((Number(balance) / 1000000).toString());
 
     // Blockchain hooks (only used when not in TEST_MODE)
@@ -109,6 +112,12 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                 const amountBigInt = BigInt(Math.floor(amountNum * 1_000_000));
 
                 if (orderType === 'buy') {
+                    if (amountNum > balanceNum) {
+                        showErrorToast(`Insufficient USDC balance. You have $${balanceNum.toFixed(2)}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+
                     if (allowance < amountBigInt) {
                         await approve(amountBigInt);
                         showSuccessToast('Approving USDC...');
@@ -124,7 +133,12 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                 }
 
                 setAmount('');
-                refetchAllowance();
+
+                // Global Refresh
+                await Promise.all([
+                    refetchAllowance(),
+                    refetchBalance()
+                ]);
 
                 await fetch('http://localhost:3001/trades', {
                     method: 'POST',
@@ -208,7 +222,9 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-medium text-neutral-700 dark:text-zinc-300">Amount (USDC)</label>
                     <span className="text-xs text-neutral-500 dark:text-zinc-400">
-                        Balance: <span className="font-semibold text-neutral-900 dark:text-white">${balanceNum.toFixed(2)}</span>
+                        Balance: <span className="font-semibold text-neutral-900 dark:text-white">
+                            {isLoading ? '...' : `$${balanceNum.toFixed(2)}`}
+                        </span>
                     </span>
                 </div>
                 <input

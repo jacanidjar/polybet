@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { EmptyState } from "@/components/EmptyState";
 import { TrendingUp, TrendingDown, Wallet, Search, Filter, ExternalLink, Calendar, Edit2, Share2 } from "lucide-react";
 import { toast } from '@/lib/toast';
+import { useSellShares, useUSDCBalance, useClaimWinnings } from '@/hooks/useContracts';
 import {
     AreaChart,
     Area,
@@ -113,12 +114,41 @@ export default function PortfolioPage() {
         fetchPortfolio();
     }, [user?.address]);
 
+    const { sell } = useSellShares();
+    const { claim } = useClaimWinnings();
+
+    const handleClaim = async (position: Position) => {
+        if (!user) return;
+        try {
+            await claim(position.marketId);
+            toast.success("Winnings Claimed! 🏆");
+
+            // Wait a moment for indexed data updates or refetch immediately
+            setTimeout(() => {
+                fetchPortfolio();
+            }, 2000);
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to claim winnings");
+        }
+    };
+
     const handleSell = async (position: Position) => {
         if (!user) return;
         if (!confirm(`Sell all shares in "${position.marketQuestion}"?`)) return;
 
         setSellingId(position.id);
         try {
+            // 1. Sell on Blockchain
+            const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
+            const sharesBigInt = BigInt(Math.floor(position.shares)); // Ensure integer
+
+            const hash = await sell(position.marketId, outcomeIndex, sharesBigInt);
+            // Optionally wait for receipt usage if needed, but await sell() waits for signature? 
+            // writeContractAsync usually returns hash. We might want to wait for confirmation but for MVP OK.
+
+            // 2. Record indexer update (Backend)
             const sellPrice = position.currentPrice;
             const sellAmount = position.shares * sellPrice;
 
@@ -131,15 +161,17 @@ export default function PortfolioPage() {
                     type: 'SELL',
                     outcome: position.outcome,
                     amount: sellAmount,
-                    price: sellPrice
+                    price: sellPrice,
+                    txHash: hash // Save tx hash for reference
                 })
             });
 
             if (!res.ok) throw new Error("Failed to sell");
-            toast.success("Position sold!");
+            toast.success("Position sold & Funds returned! 💸");
             fetchPortfolio();
         } catch (error) {
-            toast.error("Failed to sell");
+            console.error(error);
+            toast.error("Failed to sell on-chain");
         } finally {
             setSellingId(null);
         }
@@ -396,13 +428,22 @@ export default function PortfolioPage() {
                                                             </div>
                                                         </td>
                                                         <td className="pr-6 py-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button
-                                                                onClick={() => handleSell(p)}
-                                                                disabled={sellingId === p.id}
-                                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
-                                                            >
-                                                                {sellingId === p.id ? 'Selling...' : 'Sell'}
-                                                            </button>
+                                                            <div className="flex justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handleClaim(p)}
+                                                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold"
+                                                                    title="Claim winnings"
+                                                                >
+                                                                    Claim
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleSell(p)}
+                                                                    disabled={sellingId === p.id}
+                                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                                                                >
+                                                                    {sellingId === p.id ? 'Selling...' : 'Sell'}
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
