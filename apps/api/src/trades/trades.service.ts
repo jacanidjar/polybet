@@ -6,7 +6,7 @@ interface CreateTradeDto {
     marketId: number;
     outcome: 'YES' | 'NO';
     amount: number;
-    type: 'BUY' | 'SELL';
+    type: 'BUY' | 'SELL' | 'CLAIM';
     price: number; // In a real app, this should be calculated on server
 }
 
@@ -22,7 +22,8 @@ export class TradesService {
         if (!market) throw new NotFoundException('Market not found');
 
         const amountDecimal = dto.amount;
-        const shares = dto.amount / dto.price;
+        // For CLAIM, price/shares logic is different (usually total payout) but we can accept 0
+        const shares = dto.type === 'CLAIM' ? 0 : dto.amount / dto.price;
 
         return this.prisma.$transaction(async (tx) => {
             // 1. Create Trade Record
@@ -49,7 +50,14 @@ export class TradesService {
                 },
             });
 
-            if (dto.type === 'SELL') {
+            if (dto.type === 'CLAIM') {
+                if (existingPosition) {
+                    // CLAIM: Claims all winnings, shares become 0. Delete position.
+                    await tx.position.delete({
+                        where: { id: existingPosition.id }
+                    });
+                }
+            } else if (dto.type === 'SELL') {
                 if (!existingPosition || Number(existingPosition.shares) < shares) {
                     throw new BadRequestException('Insufficient shares to sell');
                 }
@@ -108,10 +116,13 @@ export class TradesService {
         });
     }
 
-    async findAll(marketId?: number) {
+    async findAll(marketId?: number, userId?: string) {
         return this.prisma.trade.findMany({
-            where: marketId ? { marketId } : undefined,
-            take: 50,
+            where: {
+                ...(marketId ? { marketId } : {}),
+                ...(userId ? { userId } : {}),
+            },
+            take: 1000, // Increased limit for history
             orderBy: { createdAt: 'desc' },
             include: {
                 user: true,

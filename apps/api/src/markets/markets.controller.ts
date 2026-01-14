@@ -21,6 +21,11 @@ export class MarketsController {
         return this.marketsService.seed();
     }
 
+    @Get('debug/reset-all')
+    async resetAll() {
+        return this.marketsService.resetAll();
+    }
+
     // Resolve market (sync blockchain -> backend)
     @Patch(':id/resolve')
     async resolveMarket(@Param('id') id: string, @Body() body: { resolved: boolean; winner: string }) {

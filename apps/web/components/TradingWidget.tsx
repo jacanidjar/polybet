@@ -140,11 +140,11 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                     refetchBalance()
                 ]);
 
-                await fetch('http://localhost:3001/trades', {
+                const res = await fetch('http://localhost:3001/trades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        userAddress: address,
+                        userAddress: user?.address || address,
                         marketId: marketId,
                         outcome: outcome,
                         amount: amountNum,
@@ -152,10 +152,17 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                         price: calculations?.price
                     })
                 });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`Backend Sync Failed: ${errorText}`);
+                }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Trading Error:', error);
-            showErrorToast('Transaction failed or rejected');
+            // Show specific error message if available
+            const errorMessage = error.message || 'Transaction failed or rejected';
+            showErrorToast(errorMessage);
         } finally {
             setIsSubmitting(false);
         }

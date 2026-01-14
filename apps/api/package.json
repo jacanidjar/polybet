@@ -6,7 +6,10 @@
         "build": "nest build",
         "start": "nest start",
         "start:dev": "nest start --watch",
-        "start:fix": "npm install && npx prisma generate && nest start"
+        "start:fix": "npm install && npx prisma generate && nest start",
+        "reset-markets": "node src/reset-markets.js",
+        "reset-positions": "node src/reset-positions.js",
+        "test": "jest"
     },
     "dependencies": {
         "@langchain/core": "^0.3.0",

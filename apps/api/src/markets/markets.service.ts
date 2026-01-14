@@ -59,7 +59,21 @@ export class MarketsService {
     async resolveMarket(id: number, winner: string) {
         return this.prisma.market.update({
             where: { id },
-            data: { resolved: true }
+            data: {
+                resolved: true,
+                outcome: winner
+            }
         });
+    }
+
+    async resetAll() {
+        // Reset all markets to open state
+        await this.prisma.market.updateMany({
+            data: {
+                resolved: false,
+                outcome: null
+            }
+        });
+        return { message: 'All markets reset to OPEN' };
     }
 }

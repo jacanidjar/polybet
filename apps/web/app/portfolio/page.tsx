@@ -6,9 +6,14 @@ import { type Address } from 'viem';
 import { useAuth } from "@/context/AuthContext";
 import { Header } from "@/components/Header";
 import { EmptyState } from "@/components/EmptyState";
-import { TrendingUp, TrendingDown, Wallet, Search, Filter, ExternalLink, Calendar, Edit2, Share2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Search, Filter, ExternalLink, Calendar, Edit2, Share2, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from '@/lib/toast';
 import { useSellShares, useUSDCBalance, useClaimWinnings, useResolveMarket } from '@/hooks/useContracts';
+import { usePublicClient } from 'wagmi';
+import PolybetMarketABI from '@/lib/contracts/PolybetMarket.json';
+import CONTRACT_CONFIG from '@/lib/contracts-config.json';
+
+const MARKET_ADDRESS = CONTRACT_CONFIG.MARKET_ADDRESS;
 import {
     AreaChart,
     Area,
@@ -57,34 +62,99 @@ export default function PortfolioPage() {
     const [positions, setPositions] = useState<Position[]>([]);
     const [loading, setLoading] = useState(true);
     const [sellingId, setSellingId] = useState<number | null>(null);
+    const [trades, setTrades] = useState<any[]>([]);
+    const [activityFilter, setActivityFilter] = useState<'ALL' | 'BETS' | 'TRANSFERS'>('ALL');
 
-    // Mock data for the P&L chart
-    const pnlChartData = useMemo(() => [
-        { day: '1', pnl: -10 },
-        { day: '2', pnl: 5 },
-        { day: '3', pnl: -2 },
-        { day: '4', pnl: 12 },
-        { day: '5', pnl: 8 },
-        { day: '6', pnl: 25 },
-        { day: '7', pnl: 18 },
-        { day: '8', pnl: 30 },
-        { day: '9', pnl: 22 },
-        { day: '10', pnl: 45 },
-    ], []);
+    // Real P&L Chart Data
+    const pnlChartData = useMemo(() => {
+        if (!trades.length) return [];
+
+        // Sort trades by date ascending
+        const sorted = [...trades].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        // Cumulative PnL logic: Realized PnL over time
+        let runningPnL = 0;
+        const dataPoints: any[] = [];
+
+        sorted.forEach(t => {
+            if (t.type === 'SELL' || t.type === 'CLAIM') {
+                // Realized Gain = Received Amount - (Shares * AvgPrice)
+                // We don't have historical AvgPrice easily, so we approximate or use 'price' delta?
+                // Simplification for MVP: Chart "Net Cash Flow" from trading. 
+                // Buy = -Cost, Sell = +Revenue. 
+                // This equals (Revenue - Cost) which is PnL, BUT it dips negative when you hold assets.
+                // To fix visual, we add "Unrealized Value" (Cost Basis) back? 
+                // Let's just chart "Realized PnL" (Cash Out - Cash In for closed trades)
+                // Actually, simplest is "Balance History" approach but focused on PnL.
+
+                // Let's try: Metric = "Net Transfer"
+                // Buy $10 -> -10
+                // Sell $12 -> +12
+                // Net = +2.
+                // This chart will naturally dip negative when you invest, and go positive when you profit.
+                // This is actually "Cumulative Cash Flow".
+                // Users usually want to see "Portfolio Value" (Cash + Assets).
+                // If we assume a starting cash of 0 for the chart tracking:
+                // Buy $10: Cash -10, Asset +10. Value = 0.
+                // Market moves up 10%: Asset becomes 11. Value = 1.
+                // We can't see market moves in history.
+                // So History Line is flat 0 (Total Value) until a Sell happens?
+                // Or we capture the "Realized PnL" only.
+
+                // Let's chart "Realized PnL" only.
+                // Buy: No change to Realized PnL.
+                // Sell: Realized PnL += (SellAmt - (Shares * BuyPrice)).
+                // We need BuyPrice.
+
+                // Fallback: Chart "Volume" or just "Net Cash Flow".
+                // Let's do "Net Cash Flow" (Invested vs Returned).
+                const amount = t.amount; // Dollar value
+                if (t.type === 'BUY') runningPnL -= amount;
+                else runningPnL += amount;
+            } else if (t.type === 'BUY') {
+                runningPnL -= t.amount;
+            }
+
+            dataPoints.push({
+                date: new Date(t.createdAt).toLocaleDateString(),
+                pnl: runningPnL,
+                fullDate: t.createdAt
+            });
+        });
+
+        // Downsample if too many points?
+        return dataPoints;
+    }, [trades]);
 
     const fetchPortfolio = async () => {
-        if (!user?.address) return;
+        if (!user?.address && !user?.id) return;
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:3001/users/${user.address}/portfolio`);
-            if (!res.ok) throw new Error("Failed to fetch user data");
+            // Fetch User Portfolio
+            const res = await fetch(`http://localhost:3001/users/${user.address || user.id}/portfolio`);
             const userData = await res.json();
 
-            const mappedPositions = userData.positions.map((p: any) => {
+            // Fetch User Trades (History)
+            const userId = userData.id || user.id;
+            const tradesRes = await fetch(`http://localhost:3001/trades?userId=${userId}`);
+            const tradesData = await tradesRes.json();
+            setTrades(tradesData);
+
+            // First map to raw objects
+            const rawPositions = userData.positions.map((p: any) => {
                 const avgPrice = p.avgPrice;
                 const shares = Number(p.shares);
-                const marketChance = p.market?.chance || 50;
-                const currentPrice = p.outcome === 'YES' ? marketChance / 100 : 1 - (marketChance / 100);
+
+                let currentPrice;
+                if (p.market?.resolved && p.market?.outcome) {
+                    // If resolved, price is 0 (Lost) or 1 (Won)
+                    currentPrice = p.market.outcome === p.outcome ? 1 : 0;
+                } else {
+                    // If active, use market chance
+                    const marketChance = p.market?.chance || 50;
+                    currentPrice = p.outcome === 'YES' ? marketChance / 100 : 1 - (marketChance / 100);
+                }
+
                 const invested = shares * avgPrice;
                 const currentValue = shares * currentPrice;
                 const pnl = currentValue - invested;
@@ -103,11 +173,35 @@ export default function PortfolioPage() {
                     pnl,
                     pnlPercent,
                     marketResolved: p.market?.resolved || false,
-                    marketWinner: p.market?.outcome || null // Map winner from backend
+                    marketWinner: p.market?.outcome || null
                 };
             });
 
-            setPositions(mappedPositions);
+            // Group and Merge duplicates
+            const mergedMap = new Map();
+
+            rawPositions.forEach((pos: any) => {
+                const key = `${pos.marketId}-${pos.outcome}`;
+                if (mergedMap.has(key)) {
+                    const existing = mergedMap.get(key);
+                    // Merge logic: Average Price weighted by shares? 
+                    // Simplified: Total Invested / Total Shares = New Avg Price
+                    const totalShares = existing.shares + pos.shares;
+                    const totalInvested = existing.invested + pos.invested;
+                    const newAvgPrice = totalShares > 0 ? totalInvested / totalShares : 0;
+
+                    existing.shares = totalShares;
+                    existing.invested = totalInvested;
+                    existing.currentValue = existing.currentValue + pos.currentValue;
+                    existing.avgPrice = newAvgPrice;
+                    existing.pnl = existing.currentValue - existing.invested;
+                    existing.pnlPercent = existing.invested > 0 ? (existing.pnl / existing.invested) * 100 : 0;
+                } else {
+                    mergedMap.set(key, pos);
+                }
+            });
+
+            setPositions(Array.from(mergedMap.values()));
         } catch (error) {
             console.error("Error loading portfolio:", error);
         } finally {
@@ -118,11 +212,53 @@ export default function PortfolioPage() {
     useEffect(() => {
         fetchPortfolio();
     }, [user?.address]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 5;
+
+    const exportToCSV = () => {
+        if (!positions.length) return;
+
+        const headers = ["Market", "Outcome", "Shares", "Avg Price", "Current Price", "Invested", "Current Value", "PnL", "PnL %"];
+        const rows = positions.map(p => [
+            `"${p.marketQuestion}"`,
+            p.outcome,
+            p.shares,
+            p.avgPrice.toFixed(4),
+            p.currentPrice.toFixed(4),
+            p.invested.toFixed(2),
+            p.currentValue.toFixed(2),
+            p.pnl.toFixed(2),
+            p.pnlPercent.toFixed(2)
+        ]);
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(r => r.join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `polybet_portfolio_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const paginatedPositions = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return positions.slice(start, start + ITEMS_PER_PAGE);
+    }, [positions, currentPage]);
+
+    const totalPages = Math.ceil(positions.length / ITEMS_PER_PAGE);
 
     const { sell } = useSellShares();
     const { claim } = useClaimWinnings();
     const { resolve } = useResolveMarket();
     const { refetch: refetchBalance } = useUSDCBalance(user?.address as Address);
+
+    const publicClient = usePublicClient();
 
     const handleResolve = async (position: Position) => {
         if (!user) return;
@@ -134,10 +270,35 @@ export default function PortfolioPage() {
         const outcomeIndex = winner === 'YES' ? 1 : 2;
 
         try {
+            // 0. Pre-flight Check
+            const marketData = await publicClient?.readContract({
+                address: MARKET_ADDRESS as Address,
+                abi: PolybetMarketABI,
+                functionName: 'markets',
+                args: [BigInt(position.marketId)]
+            }) as any[];
+
+            const isResolvedOnChain = marketData?.[3];
+            const winnerEnum = marketData?.[4];
+
+            if (isResolvedOnChain) {
+                const winnerStr = winnerEnum === 1 ? 'YES' : (winnerEnum === 2 ? 'NO' : 'NONE');
+                toast(`Already resolved to ${winnerStr} on-chain! Syncing... 🔄`, { icon: '⚠️' });
+
+                await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resolved: true, winner: winnerStr })
+                });
+
+                fetchPortfolio();
+                return;
+            }
+
             // 1. Resolve on blockchain
             await resolve(position.marketId, outcomeIndex);
 
-            // 2. Update backend to mark market as resolved
+            // 2. Update backend
             await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -145,8 +306,6 @@ export default function PortfolioPage() {
             });
 
             toast.success(`Market Resolved to ${winner}! 👨‍⚖️`);
-
-            // 3. Refresh portfolio to enable Claim button
             fetchPortfolio();
         } catch (error) {
             console.error(error);
@@ -155,45 +314,115 @@ export default function PortfolioPage() {
     };
 
     const handleClaim = async (position: Position) => {
-        if (!user) return;
+        if (!user || !user.address) return;
+
         try {
+            // 0. Pre-flight Check
+            const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
+            const sharesOnChain = await publicClient?.readContract({
+                address: MARKET_ADDRESS as Address,
+                abi: PolybetMarketABI,
+                functionName: 'positions',
+                args: [BigInt(position.marketId), user.address as Address, outcomeIndex]
+            }) as bigint;
+
+            if (sharesOnChain === BigInt(0)) {
+                toast("Already claimed on-chain! Syncing... 🔄", { icon: '⚠️' });
+
+                await fetch('http://localhost:3001/trades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userAddress: user.address,
+                        marketId: position.marketId,
+                        type: 'CLAIM',
+                        outcome: position.outcome,
+                        amount: 0,
+                        price: 1
+                    })
+                });
+
+                refetchBalance();
+                setTimeout(() => fetchPortfolio(), 1000);
+                return;
+            }
+
+            // 1. Claim
             await claim(position.marketId);
             toast.success("Winnings Claimed! 🏆");
 
-            // Immediately update balance and portfolio
-            refetchBalance();
+            // Sync with backend
+            await fetch('http://localhost:3001/trades', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userAddress: user.address,
+                    marketId: position.marketId,
+                    type: 'CLAIM',
+                    outcome: position.outcome,
+                    amount: 0,
+                    price: 1
+                })
+            });
 
-            // Wait a moment for indexed data updates or refetch immediately
+            refetchBalance();
             setTimeout(() => {
                 fetchPortfolio();
-                refetchBalance(); // Check again to be sure
+                refetchBalance();
             }, 2000);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
             toast.error("Failed to claim winnings");
         }
     };
 
     const handleSell = async (position: Position) => {
-        if (!user) return;
+        if (!user || !user.address) return;
         if (!confirm(`Sell all shares in "${position.marketQuestion}"?`)) return;
 
         setSellingId(position.id);
         try {
-            // 1. Sell on Blockchain
             const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
-            const sharesBigInt = BigInt(Math.floor(position.shares * 1e18)); // Shares stored with 18 decimals
 
-            const hash = await sell(position.marketId, outcomeIndex, sharesBigInt);
-            // Optionally wait for receipt usage if needed, but await sell() waits for signature? 
-            // writeContractAsync usually returns hash. We might want to wait for confirmation but for MVP OK.
+            // 0. Pre-flight Check
+            const sharesOnChain = await publicClient?.readContract({
+                address: MARKET_ADDRESS as Address,
+                abi: PolybetMarketABI,
+                functionName: 'positions',
+                args: [BigInt(position.marketId), user.address as Address, outcomeIndex]
+            }) as bigint;
+
+            if (sharesOnChain === BigInt(0)) {
+                toast("Already sold on-chain! Syncing... 🔄", { icon: '⚠️' });
+
+                await fetch('http://localhost:3001/trades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userAddress: user.address,
+                        marketId: position.marketId,
+                        type: 'CLAIM', // deletes position
+                        outcome: position.outcome,
+                        amount: 0,
+                        price: 1
+                    })
+                });
+
+                refetchBalance();
+                setTimeout(() => fetchPortfolio(), 1000);
+                return;
+            }
+
+            // 1. Sell on Blockchain
+            const sharesBigInt = BigInt(Math.floor(position.shares * 1e18));
+            await sell(position.marketId, outcomeIndex, sharesBigInt);
 
             // 2. Record indexer update (Backend)
             const sellPrice = position.currentPrice;
             const sellAmount = position.shares * sellPrice;
 
-            const res = await fetch('http://localhost:3001/trades', {
+            await fetch('http://localhost:3001/trades', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -203,18 +432,15 @@ export default function PortfolioPage() {
                     outcome: position.outcome,
                     amount: sellAmount,
                     price: sellPrice,
-                    txHash: hash // Save tx hash for reference
                 })
             });
 
-            if (!res.ok) throw new Error("Failed to sell");
-            if (!res.ok) throw new Error("Failed to sell");
-            toast.success("Position sold & Funds returned! 💸");
+            toast.success(`Sold shares for $${sellAmount.toFixed(2)}`);
             fetchPortfolio();
-            refetchBalance(); // Ensure cash updates immediately
+            refetchBalance();
         } catch (error) {
             console.error(error);
-            toast.error("Failed to sell on-chain");
+            toast.error("Failed to sell shares");
         } finally {
             setSellingId(null);
         }
@@ -290,6 +516,13 @@ export default function PortfolioPage() {
                                 </div>
                             </div>
                             <div className="flex gap-2">
+                                <button
+                                    onClick={exportToCSV}
+                                    className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"
+                                    title="Export to CSV"
+                                >
+                                    <Download size={18} />
+                                </button>
                                 <button className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400">
                                     <Edit2 size={18} />
                                 </button>
@@ -433,86 +666,112 @@ export default function PortfolioPage() {
                             >
                                 {positionFilter === 'active' && positions.length > 0 ? (
                                     <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
-                                        <table className="w-full text-left">
-                                            <thead>
-                                                <tr className="bg-zinc-50 dark:bg-zinc-800/50 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                                                    <th className="px-6 py-4">Market</th>
-                                                    <th className="px-6 py-4">Avg</th>
-                                                    <th className="px-6 py-4">Current</th>
-                                                    <th className="px-6 py-4 text-right">Value</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                                                {positions.map((p) => (
-                                                    <tr key={p.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
-                                                        <td className="px-6 py-5">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-sm font-bold dark:text-white mb-1 leading-tight">{p.marketQuestion}</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${p.outcome === 'YES' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                                                                        {p.outcome}
-                                                                    </span>
-                                                                    <span className="text-xs text-zinc-400">{p.shares.toLocaleString()} shares</span>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <span className="text-sm font-medium dark:text-white">{(p.avgPrice * 100).toFixed(1)}¢</span>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <span className="text-sm font-medium dark:text-white">{(p.currentPrice * 100).toFixed(1)}¢</span>
-                                                        </td>
-                                                        <td className="px-6 py-5 text-right">
-                                                            <div className="flex flex-col items-end">
-                                                                <span className="text-sm font-bold dark:text-white">${p.currentValue.toFixed(2)}</span>
-                                                                <span className={`text-[10px] font-bold ${p.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                                                    {p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)} ({p.pnlPercent.toFixed(1)}%)
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="pr-6 py-5 text-right opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <div className="flex justify-end gap-2">
-                                                                {p.marketResolved ? (
-                                                                    <>
-                                                                        {p.marketWinner === p.outcome ? (
-                                                                            <button
-                                                                                onClick={() => handleClaim(p)}
-                                                                                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold shadow-sm animate-pulse"
-                                                                                title="Market resolved in your favor! Claim winnings."
-                                                                            >
-                                                                                Claim Winnings 🏆
-                                                                            </button>
-                                                                        ) : (
-                                                                            <span className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-lg text-xs font-bold border border-zinc-200 dark:border-zinc-700 cursor-not-allowed">
-                                                                                ❌ Lost
-                                                                            </span>
-                                                                        )}
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        {/* Active Market Actions */}
-                                                                        <button
-                                                                            onClick={() => handleResolve(p)}
-                                                                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
-                                                                            title="Debug: Resolve Market to YES"
-                                                                        >
-                                                                            Resolve
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleSell(p)}
-                                                                            disabled={sellingId === p.id}
-                                                                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
-                                                                        >
-                                                                            {sellingId === p.id ? 'Selling...' : 'Sell'}
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </td>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="bg-zinc-50 dark:bg-zinc-800/50 text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">
+                                                        <th className="px-6 py-4">Market</th>
+                                                        <th className="px-6 py-4">Avg</th>
+                                                        <th className="px-6 py-4">Current</th>
+                                                        <th className="px-6 py-4 text-right">Value</th>
+                                                        <th className="px-6 py-4 text-right">Action</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                                    {paginatedPositions.map((p) => (
+                                                        <tr key={p.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
+                                                            <td className="px-6 py-5 min-w-[300px]">
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-sm font-bold dark:text-white mb-1 leading-tight line-clamp-2">{p.marketQuestion}</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${p.outcome === 'YES' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                                                            {p.outcome}
+                                                                        </span>
+                                                                        <span className="text-xs text-zinc-400">{p.shares.toLocaleString()} shares</span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <span className="text-sm font-medium dark:text-white">{(p.avgPrice * 100).toFixed(1)}¢</span>
+                                                            </td>
+                                                            <td className="px-6 py-5">
+                                                                <span className="text-sm font-medium dark:text-white">{(p.currentPrice * 100).toFixed(1)}¢</span>
+                                                            </td>
+                                                            <td className="px-6 py-5 text-right">
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-sm font-bold dark:text-white">${p.currentValue.toFixed(2)}</span>
+                                                                    <span className={`text-[10px] font-bold ${p.pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                                                        {p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)} ({p.pnlPercent.toFixed(1)}%)
+                                                                    </span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="pr-6 py-5 text-right">
+                                                                <div className="flex justify-end gap-2">
+                                                                    {p.marketResolved ? (
+                                                                        <>
+                                                                            {p.marketWinner === p.outcome ? (
+                                                                                <button
+                                                                                    onClick={() => handleClaim(p)}
+                                                                                    className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold shadow-sm animate-pulse"
+                                                                                    title="Market resolved in your favor! Claim winnings."
+                                                                                >
+                                                                                    Claim Winnings 🏆
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 rounded-lg text-xs font-bold border border-zinc-200 dark:border-zinc-700 cursor-not-allowed">
+                                                                                    ❌ Lost
+                                                                                </span>
+                                                                            )}
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            {/* Active Market Actions */}
+                                                                            <button
+                                                                                onClick={() => handleResolve(p)}
+                                                                                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
+                                                                                title="Debug: Resolve Market to YES"
+                                                                            >
+                                                                                Resolve
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleSell(p)}
+                                                                                disabled={sellingId === p.id}
+                                                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                                                                            >
+                                                                                {sellingId === p.id ? 'Selling...' : 'Sell'}
+                                                                            </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Pagination Controls */}
+                                        {totalPages > 1 && (
+                                            <div className="border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/20 px-6 py-4 flex items-center justify-between">
+                                                <button
+                                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                    disabled={currentPage === 1}
+                                                    className="p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    <ChevronLeft size={16} className="text-zinc-600 dark:text-zinc-400" />
+                                                </button>
+                                                <span className="text-sm font-medium text-zinc-500">
+                                                    Page {currentPage} of {totalPages}
+                                                </span>
+                                                <button
+                                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                    disabled={currentPage === totalPages}
+                                                    className="p-2 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    <ChevronRight size={16} className="text-zinc-600 dark:text-zinc-400" />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <EmptyState
@@ -527,11 +786,72 @@ export default function PortfolioPage() {
                 )}
 
                 {activeTab === 'activity' && (
-                    <EmptyState
-                        icon="activity"
-                        title="No activity found"
-                        description="Your trade history will appear here."
-                    />
+                    <div className="space-y-6">
+                        {/* Activity Filters */}
+                        <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 w-fit">
+                            {(['ALL', 'BETS', 'TRANSFERS'] as const).map(filter => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setActivityFilter(filter)}
+                                    className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${activityFilter === filter ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-500'}`}
+                                >
+                                    {filter === 'BETS' ? 'Bets' : filter === 'TRANSFERS' ? 'Transfers' : 'All'}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Activity List */}
+                        <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-zinc-50 dark:bg-zinc-800/50 text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">
+                                            <th className="px-6 py-4">Action</th>
+                                            <th className="px-6 py-4">Market</th>
+                                            <th className="px-6 py-4">Outcome</th>
+                                            <th className="px-6 py-4 text-right">Amount</th>
+                                            <th className="px-6 py-4 text-right">Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                        {trades
+                                            .filter(t => activityFilter === 'ALL' || (activityFilter === 'BETS' ? ['BUY', 'SELL', 'CLAIM'].includes(t.type) : false))
+                                            .map((t) => (
+                                                <tr key={t.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                                                    <td className="px-6 py-4">
+                                                        <span className={`text-xs font-bold px-2 py-1 rounded ${t.type === 'BUY' ? 'bg-green-100 text-green-700' :
+                                                            t.type === 'SELL' ? 'bg-blue-100 text-blue-700' :
+                                                                t.type === 'CLAIM' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                            {t.type}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm dark:text-white line-clamp-1 max-w-[200px]">
+                                                        {t.market?.question || '-'}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm font-bold text-zinc-500">
+                                                        {t.outcome}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-sm font-mono dark:text-white">
+                                                        ${t.amount.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-xs text-zinc-400">
+                                                        {new Date(t.createdAt).toLocaleDateString()}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        {trades.length === 0 && (
+                                            <tr>
+                                                <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">
+                                                    No activity found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </main>
