@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -29,7 +29,7 @@ model Market {
   category    String
   image       String?
   
-  volume      Decimal  @default(0) @db.Decimal(20, 2)
+  volume      Decimal  @default(0)
   chance      Float    @default(50)
   
   endDate     DateTime?
@@ -48,9 +48,9 @@ model Trade {
   id        String   @id @default(uuid())
   type      String   // "BUY" or "SELL"
   outcome   String   // "YES" or "NO"
-  amount    Decimal  @db.Decimal(20, 2)
+  amount    Decimal
   price     Float
-  shares    Decimal  @db.Decimal(20, 2)
+  shares    Decimal
   
   userId    String
   user      User     @relation(fields: [userId], references: [id])
@@ -64,7 +64,7 @@ model Trade {
 model Position {
   id        String   @id @default(uuid())
   outcome   String   // "YES" or "NO"
-  shares    Decimal  @db.Decimal(20, 2)
+  shares    Decimal
   avgPrice  Float
   
   userId    String

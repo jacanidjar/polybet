@@ -81,3 +81,30 @@ export const useSellShares = () => {
 
     return { sell, isPending, hash };
 };
+
+// Hook to check USDC Balance
+export const useUSDCBalance = (userAddress: Address | undefined) => {
+    const { data: balance, refetch } = useReadContract({
+        address: USDC_ADDRESS as Address,
+        abi: MockUSDCABI,
+        functionName: 'balanceOf',
+        args: userAddress ? [userAddress] : undefined,
+    });
+    return { balance: balance as bigint || 0n, refetch };
+};
+
+// Hook to Mint Fake USDC
+export const useMintUSDC = () => {
+    const { writeContractAsync, isPending, data: hash } = useWriteContract();
+
+    const mint = async (to: Address, amount: bigint) => {
+        return writeContractAsync({
+            address: USDC_ADDRESS as Address,
+            abi: MockUSDCABI,
+            functionName: 'mint',
+            args: [to, amount],
+        });
+    };
+
+    return { mint, isPending, hash };
+};

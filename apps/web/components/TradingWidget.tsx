@@ -5,7 +5,12 @@ import { cn } from '@/lib/utils';
 import { Info } from 'lucide-react';
 import { showSuccessToast, showErrorToast } from '@/lib/toast';
 import { useAccount } from 'wagmi';
-import { useApproveToken, useBuyShares, useSellShares, useCheckAllowance } from '@/hooks/useContracts';
+import { useApproveToken, useBuyShares, useSellShares, useCheckAllowance, useUSDCBalance } from '@/hooks/useContracts';
+import { useAuth } from '@/context/AuthContext';
+import { Faucet } from './Faucet';
+
+// TEST MODE: Set to true to simulate trades without blockchain
+const TEST_MODE = false;
 
 interface TradingWidgetProps {
     initialOutcome?: 'yes' | 'no';
@@ -14,12 +19,17 @@ interface TradingWidgetProps {
 
 export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidgetProps) => {
     const { address, isConnected } = useAccount();
+    const { user, authenticated } = useAuth();
     const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
     const [outcome, setOutcome] = useState<'yes' | 'no'>(initialOutcome);
     const [amount, setAmount] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Blockchain hooks
+    // Real Crypto Balance
+    const { balance } = useUSDCBalance(address);
+    const balanceNum = parseFloat((Number(balance) / 1000000).toString());
+
+    // Blockchain hooks (only used when not in TEST_MODE)
     const { approve, isPending: isApproving } = useApproveToken();
     const { buy, isPending: isBuying } = useBuyShares();
     const { sell, isPending: isSelling } = useSellShares();
@@ -34,8 +44,6 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
         if (amountNum === 0) return null;
 
         const price = outcome === 'yes' ? yesPrice : noPrice;
-        // Logic: For simplicity in MVP, we assume price is fixed ratio.
-        // In real AMM, this would fetch from contract.
         const shares = amountNum / price;
         const maxPayout = shares * 1.00;
         const maxProfit = maxPayout - amountNum;
@@ -51,8 +59,9 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
     }, [amount, outcome, yesPrice, noPrice]);
 
     const handlePlaceOrder = async () => {
-        if (!isConnected || !address) {
-            showErrorToast('Please connect your wallet first');
+        // Check authentication (works for both wallet and email login)
+        if (!authenticated) {
+            showErrorToast('Please login first');
             return;
         }
 
@@ -64,64 +73,72 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
 
         setIsSubmitting(true);
         try {
-            // Convert to BigInt (USDC has 6 decimals)
-            const amountBigInt = BigInt(Math.floor(amountNum * 1_000_000));
-
-            if (orderType === 'buy') {
-                // 1. Check Allowance
-                if (allowance < amountBigInt) {
-                    const tx = await approve(amountBigInt);
-                    showSuccessToast('Approving USDC...');
-                    // Ideally wait for tx, but wagmi handles prompt
+            if (TEST_MODE) {
+                // SIMULATED TRADE - No blockchain interaction
+                if (orderType === 'buy') {
+                    if (amountNum > testBalance) {
+                        showErrorToast(`Insufficient balance. You have $${testBalance.toFixed(2)}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                    setTestBalance(prev => prev - amountNum);
+                    showSuccessToast(`[TEST] Bought ${calculations?.shares} shares of ${outcome.toUpperCase()} for $${amountNum}!`);
+                } else {
+                    setTestBalance(prev => prev + amountNum);
+                    showSuccessToast(`[TEST] Sold shares for $${amountNum}!`);
                 }
 
-                // 2. Buy Shares
-                // Outcome: 1=YES, 2=NO
-                const outcomeId = outcome === 'yes' ? 1 : 2;
-                await buy(marketId, outcomeId, amountBigInt);
-                showSuccessToast(`Buy Order Sent!`);
+                // Sync with backend
+                const userAddress = user?.address || address || 'test-user';
+                await fetch('http://localhost:3001/trades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userAddress: userAddress,
+                        marketId: marketId,
+                        outcome: outcome.toUpperCase(),
+                        amount: amountNum,
+                        type: orderType.toUpperCase(),
+                        price: calculations?.price
+                    })
+                });
+
+                setAmount('');
             } else {
-                // Sell Logic
-                // We need to know user shares to sell. logic is similar.
-                // For now just basic sell call
-                // Shares has 18 decimals usually? Or matches USDC? 
-                // In our simplified contract, shares out calculation used 1e18 scalar.
-                // Let's assume input amount here is SHARES to sell? 
-                // Re-using "Amount" field as "Shares" for Sell mode for simplicity?
-                // Or Amount $ worth?
-                // Let's assume Amount input is always USDC.
-                // Sell logic needs fix in next step if complexity mismatch.
+                // REAL BLOCKCHAIN TRADE
+                const amountBigInt = BigInt(Math.floor(amountNum * 1_000_000));
 
-                const outcomeId = outcome === 'yes' ? 1 : 2;
-                // Assuming sell takes shares amount. 
-                // Calculations.shares is approximate.
-                // We'll use mocked logic for now or raw amount.
+                if (orderType === 'buy') {
+                    if (allowance < amountBigInt) {
+                        await approve(amountBigInt);
+                        showSuccessToast('Approving USDC...');
+                    }
+                    const outcomeId = outcome === 'yes' ? 1 : 2;
+                    await buy(marketId, outcomeId, amountBigInt);
+                    showSuccessToast(`Buy Order Sent!`);
+                } else {
+                    const outcomeId = outcome === 'yes' ? 1 : 2;
+                    const sharesToSell = BigInt(Math.floor(parseFloat(calculations?.shares || '0') * 1e18));
+                    await sell(marketId, outcomeId, sharesToSell);
+                    showSuccessToast(`Sell Order Sent!`);
+                }
 
-                // FIX: For MVP Sell, we pass shares amount. 
-                // We calculate typical shares for this amount.
-                const sharesToSell = BigInt(Math.floor(parseFloat(calculations?.shares || '0') * 1e18)); // 18 decimals
+                setAmount('');
+                refetchAllowance();
 
-                await sell(marketId, outcomeId, sharesToSell);
-                showSuccessToast(`Sell Order Sent!`);
+                await fetch('http://localhost:3001/trades', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userAddress: address,
+                        marketId: marketId,
+                        outcome: outcome,
+                        amount: amountNum,
+                        type: orderType,
+                        price: calculations?.price
+                    })
+                });
             }
-
-            setAmount('');
-            refetchAllowance();
-
-            // Sync with backend (Optional for indexing)
-            await fetch('http://localhost:3001/trades', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userAddress: address,
-                    marketId: marketId,
-                    outcome: outcome,
-                    amount: amountNum,
-                    type: orderType,
-                    price: calculations?.price
-                })
-            });
-
         } catch (error) {
             console.error('Trading Error:', error);
             showErrorToast('Transaction failed or rejected');
@@ -188,13 +205,18 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
             </div>
 
             <div className="mt-6">
-                <label className="text-sm font-medium text-neutral-700 dark:text-zinc-300">Amount (USDC)</label>
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-sm font-medium text-neutral-700 dark:text-zinc-300">Amount (USDC)</label>
+                    <span className="text-xs text-neutral-500 dark:text-zinc-400">
+                        Balance: <span className="font-semibold text-neutral-900 dark:text-white">${balanceNum.toFixed(2)}</span>
+                    </span>
+                </div>
                 <input
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="0.00"
-                    className="mt-2 w-full rounded-lg border border-neutral-200 bg-transparent px-4 py-3 text-lg font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:text-white transition-all"
+                    className="w-full rounded-lg border border-neutral-200 bg-transparent px-4 py-3 text-lg font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:text-white transition-all"
                 />
             </div>
 
@@ -222,22 +244,25 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                 </div>
             )}
 
+            {/* Faucet for Testing */}
+            <Faucet />
+
             <button
                 onClick={handlePlaceOrder}
-                disabled={!isConnected || (!amount || parseFloat(amount) <= 0) || isSubmitting}
+                disabled={!authenticated || (!amount || parseFloat(amount) <= 0) || isSubmitting}
                 className="mt-6 w-full rounded-lg bg-blue-600 py-3 font-semibold text-white hover:bg-blue-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600 disabled:active:scale-100"
             >
-                {isConnected ? (
+                {authenticated ? (
                     isSubmitting ? 'Processing...' : (orderType === 'buy' ? 'Place Order' : 'Sell Shares')
                 ) : (
-                    'Connect Wallet to Trade'
+                    'Login to Trade'
                 )}
             </button>
 
             <div className="mt-4 flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
                 <p>
-                    Shares pay out $1.00 if the outcome occurs, $0.00 otherwise.
+                    {TEST_MODE ? 'Test mode: trades are simulated, no real blockchain interaction.' : 'Shares pay out $1.00 if the outcome occurs, $0.00 otherwise.'}
                 </p>
             </div>
         </div>

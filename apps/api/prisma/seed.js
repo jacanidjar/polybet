@@ -1,0 +1,45 @@
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+async function seed() {
+    const markets = [
+        { question: "Will Trump win the 2024 Election?", volume: 12500000, chance: 45, category: "Politics" },
+        { question: "Bitcoin to hit $100k in 2024?", volume: 8200000, chance: 12, category: "Crypto" },
+        { question: "Fed to cut rates in March?", volume: 5100000, chance: 78, category: "Business" },
+        { question: "SpaceX Starship launch successful?", volume: 2300000, chance: 92, category: "Science" },
+        { question: "Lakers to win NBA Championship?", volume: 4700000, chance: 23, category: "Sports" },
+        { question: "Taylor Swift to release new album in 2024?", volume: 1800000, chance: 67, category: "Pop Culture" },
+        { question: "Ethereum to flip Bitcoin market cap?", volume: 3500000, chance: 8, category: "Crypto" },
+        { question: "Will AI replace 50% of jobs by 2030?", volume: 6200000, chance: 35, category: "Science" },
+        { question: "Apple to release AR glasses in 2024?", volume: 2900000, chance: 42, category: "Business" },
+        { question: "World Cup final to go to penalties?", volume: 1200000, chance: 28, category: "Sports" },
+    ];
+
+    for (const m of markets) {
+        const exists = await prisma.market.findFirst({ where: { question: m.question } });
+        if (!exists) {
+            await prisma.market.create({
+                data: {
+                    question: m.question,
+                    volume: m.volume,
+                    chance: m.chance,
+                    category: m.category,
+                    slug: m.question.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                }
+            });
+            console.log('Created:', m.question);
+        } else {
+            console.log('Already exists:', m.question);
+        }
+    }
+
+    console.log('Done! 10 markets seeded.');
+    await prisma.$disconnect();
+}
+
+seed().catch(e => {
+    console.error(e);
+    prisma.$disconnect();
+    process.exit(1);
+});

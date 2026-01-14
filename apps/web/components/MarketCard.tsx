@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Bookmark } from 'lucide-react';
 import { TradingModal } from './TradingModal';
-import { LoginModal } from './LoginModal';
+import { useAuth } from '@/context/AuthContext';
 
 interface MarketCardProps {
     id?: number;
@@ -15,24 +15,24 @@ interface MarketCardProps {
 
 export const MarketCard = ({ id = 1, question, volume, chance, image }: MarketCardProps) => {
     const [showTradingModal, setShowTradingModal] = useState(false);
-    const [showLoginModal, setShowLoginModal] = useState(false);
     const [selectedOutcome, setSelectedOutcome] = useState<'yes' | 'no'>('yes');
     const [isClient, setIsClient] = useState(false);
     const noChance = 100 - chance;
+
+    // Use real authentication state from AuthContext
+    const { authenticated, login } = useAuth();
 
     // Prevenir hydration error
     useEffect(() => {
         setIsClient(true);
     }, []);
 
-    // Simular check de autenticação (você vai substituir com lógica real)
-    const isAuthenticated = false; // Mude para true para testar o fluxo de trading
-
     const handleOutcomeClick = (outcome: 'yes' | 'no') => {
         setSelectedOutcome(outcome);
 
-        if (!isAuthenticated) {
-            setShowLoginModal(true);
+        if (!authenticated) {
+            // User is not logged in, trigger Privy login
+            login();
         } else {
             setShowTradingModal(true);
         }
@@ -85,22 +85,15 @@ export const MarketCard = ({ id = 1, question, volume, chance, image }: MarketCa
                 </div>
             </div>
 
-            {/* Modals - Only render on client */}
+            {/* Trading Modal - Only render on client */}
             {isClient && (
-                <>
-                    <TradingModal
-                        isOpen={showTradingModal}
-                        onClose={() => setShowTradingModal(false)}
-                        marketQuestion={question}
-                        marketId={id}
-                        initialOutcome={selectedOutcome}
-                    />
-
-                    <LoginModal
-                        isOpen={showLoginModal}
-                        onClose={() => setShowLoginModal(false)}
-                    />
-                </>
+                <TradingModal
+                    isOpen={showTradingModal}
+                    onClose={() => setShowTradingModal(false)}
+                    marketQuestion={question}
+                    marketId={id}
+                    initialOutcome={selectedOutcome}
+                />
             )}
         </>
     );

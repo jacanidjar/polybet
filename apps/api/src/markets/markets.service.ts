@@ -32,6 +32,10 @@ export class MarketsService {
             { question: "SpaceX Starship launch successful?", volume: 2300000, chance: 92, category: "Science" },
             { question: "Lakers to win NBA Championship?", volume: 4700000, chance: 23, category: "Sports" },
             { question: "Taylor Swift to release new album in 2024?", volume: 1800000, chance: 67, category: "Pop Culture" },
+            { question: "Ethereum to flip Bitcoin market cap?", volume: 3500000, chance: 8, category: "Crypto" },
+            { question: "Will AI replace 50% of jobs by 2030?", volume: 6200000, chance: 35, category: "Science" },
+            { question: "Apple to release AR glasses in 2024?", volume: 2900000, chance: 42, category: "Business" },
+            { question: "World Cup final to go to penalties?", volume: 1200000, chance: 28, category: "Sports" },
         ];
 
         for (const m of MOCK_MARKETS) {

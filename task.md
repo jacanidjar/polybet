@@ -1,4 +1,3 @@
-# Implementação: Sistema de Comentários
 
 Status: In Progress
 
@@ -11,3 +10,8 @@ Status: In Progress
 - [x] **Frontend: Integration** <!-- id: 5 -->
     - [x] Criar `CommentsSection.tsx` <!-- id: 6 -->
     - [x] Atualizar `markets/[id]/page.tsx` (Fix + Comments) <!-- id: 7 -->
+- [x] **Blockchain: Local Testing Setup** <!-- id: 8 -->
+    - [x] Add Localhost to Wagmi/Privy config <!-- id: 9 -->
+    - [x] Add useUSDCBalance and useMintUSDC hooks <!-- id: 10 -->
+    - [x] Implement Faucet Component <!-- id: 11 -->
+    - [x] Update TradingWidget to use real contract calls (localhost) <!-- id: 12 -->
