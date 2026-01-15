@@ -47,3 +47,12 @@ Status: In Progress
     - [x] **Backend:** `POST /markets` with Blockchain ID Sync <!-- id: 42 -->
     - [x] **Frontend:** `useCreateMarket` Hook <!-- id: 43 -->
     - [x] **Frontend:** `/admin` Page with Form & Logic <!-- id: 44 -->
+- [x] **Admin: Market Resolution** <!-- id: 45 -->
+    - [x] **Frontend:** List active markets in Admin Dashboard <!-- id: 46 -->
+    - [x] **Frontend:** Resolve Actions (Yes/No buttons) <!-- id: 47 -->
+    - [x] **Integration:** Connect `useResolveMarket` hook <!-- id: 48 -->
+- [x] **Admin: Auto-Image Generation** <!-- id: 49 -->
+    - [x] **Feature:** "Generate Image" button uses Pollinations.ai API <!-- id: 50 -->
+- [x] **SEO & Social (OG Tags)** <!-- id: 51 -->
+    - [x] **Frontend:** Implement `generateMetadata` in Market Page <!-- id: 52 -->
+    - [x] **Frontend:** Dynamic OpenGraph Image (Title + Chance) <!-- id: 53 -->

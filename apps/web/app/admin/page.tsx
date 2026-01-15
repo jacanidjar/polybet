@@ -1,22 +1,19 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
-import { useCreateMarket, useTokenContract, useApproveToken, useCheckAllowance } from '@/hooks/useContracts';
+import { useCreateMarket, useTokenContract, useApproveToken, useCheckAllowance, useResolveMarket } from '@/hooks/useContracts';
 import { useWaitForTransactionReceipt } from 'wagmi';
 import { Header } from '@/components/Header';
 import { showSuccessToast, showErrorToast } from '@/lib/toast';
-import { AlertTriangle, Check, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Upload, Wand2 } from 'lucide-react';
 
 export default function AdminPage() {
     const { address, isConnected } = useAccount();
     const { createMarketOnChain, isPending, hash } = useCreateMarket();
+    const { resolve, isPending: isResolving } = useResolveMarket();
     const { approve, isPending: isApproving } = useApproveToken();
     const { allowance, refetch: refetchAllowance } = useCheckAllowance(address);
-
-    // Better to just rely on the component logic below for allowance check if needed
-    // But wait, createMarket transfers USDC from admin to contract. 
-    // So Admin needs to APPROVED the Market Contract to spend their USDC.
 
     const [formData, setFormData] = useState({
         question: '',
@@ -29,6 +26,15 @@ export default function AdminPage() {
     });
 
     const [status, setStatus] = useState<'idle' | 'approving' | 'creating' | 'syncing' | 'success'>('idle');
+    const [markets, setMarkets] = useState<any[]>([]);
+
+    // Fetch markets for resolution
+    useEffect(() => {
+        fetch('http://localhost:3001/markets')
+            .then(res => res.json())
+            .then(data => setMarkets(data))
+            .catch(console.error);
+    }, [status]);
 
     // Receipt waiter
     const { isLoading: isWaiting, isSuccess: isTxSuccess, data: receipt } = useWaitForTransactionReceipt({
@@ -38,6 +44,45 @@ export default function AdminPage() {
     // Handle Form Change
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    // Magic Image Generator
+    const handleGenerateImage = () => {
+        if (!formData.question) return showErrorToast("Enter a question first");
+
+        // 1. Clear current image to force UI update
+        setFormData(prev => ({ ...prev, image: '' }));
+
+        // 2. Inject random noise directly into the prompt to bypass SERVER-SIDE caching
+        const randomNoise = Math.floor(Math.random() * 10000);
+        // "News illustration" prefix helps context. Model 'turbo' is fast and good for variety.
+        const promptText = `Editorial news illustration of: ${formData.question}, detailed, 4k, v-${randomNoise}`;
+        const prompt = encodeURIComponent(promptText);
+
+        const randomSeed = Math.floor(Math.random() * 1000000);
+        const timestamp = Date.now();
+
+        // 2. Wait 150ms then set new URL
+        setTimeout(() => {
+            // Reverting to Pollinations (Turbo Model) now that we know the UI works.
+            // Using 'turbo' model and specific seed/timestamp to ensure uniqueness.
+            // If the Robot appears, it means the API filtered the prompt content.
+            const url = `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=630&nologo=true&seed=${randomSeed}&t=${timestamp}&model=turbo`;
+            setFormData(prev => ({ ...prev, image: url }));
+            showSuccessToast("Magic Image Generated! 🪄");
+        }, 150);
+    };
+
+    // Handle Resolve
+    const handleResolve = async (marketId: number, outcomeIndex: number) => {
+        try {
+            // 1 = YES, 2 = NO
+            await resolve(marketId, outcomeIndex);
+            showSuccessToast("Resolution TX Sent!");
+        } catch (e: any) {
+            console.error(e);
+            showErrorToast("Resolution Failed: " + e.message);
+        }
     };
 
     // Main Action
@@ -61,20 +106,11 @@ export default function AdminPage() {
             }
 
             // 2. Prepare Liquidity
-            const liquidity = BigInt(Number(formData.liquidity) * 1_000_000); // 6 decimals for USDC usually? Mock is 18?
-            // Actually MockUSDC usually uses 18 in this project? Let's check MockUSDC.sol or use 1e18 just in case.
-            // The contracts used 1e18 in logic? No, let's assume standard logic.
-            // Wait, in TradingWidget we use `amountNum * 1_000_000`. So it's 6 decimals?
-            // Let's stick to 1_000_000 (6 decimals) which is standard USDC.
+            const liquidity = BigInt(Number(formData.liquidity) * 1_000_000);
 
-            // 3. Approve if needed (Skipped for simplicity in this step, assuming Admin has allowance or we add a specific button)
-            // But let's try to just run create. If it fails due to allowance, we know why.
-            // Ideally we check allowance here.
-
-            // 4. Call Blockchain
+            // 3. Call Blockchain
             await createMarketOnChain(formData.question, unixTime, liquidity);
 
-            // Now we wait for the effect to pick up the hash
         } catch (error: any) {
             console.error(error);
             showErrorToast(error.message || "Failed to create market");
@@ -82,74 +118,16 @@ export default function AdminPage() {
         }
     };
 
-    // Effect: Watch for Receipt -> Scan Logs -> Backend Sync
-    // This part is tricky. Receipt contains logs. We need to parse 'MarketCreated' to get ID.
-    // Simplifying: We just fetch the 'nextMarketId' from contract before? No, race condition.
-    // Best way: Look at Logs.
-
-    // For MVP: Let's assume the ID is incremental and we can just guess it? 
-    // No, that's dangerous.
-    // Let's Parse logs.
-
-    // If we can't parse easily on frontend without ABI decoder, 
-    // we can use the backend to "listen" or just tell the backend "hey, I created a market, check the latest".
-
-    // Alternative: The user enters the ID manually? No.
-    // Let's try to parse:
-
+    // Sync with Backend
     const syncWithBackend = async (txReceipt: any) => {
         setStatus('syncing');
         try {
-            // Find Log: MarketCreated(uint256 id, string question, uint256 endTime)
-            // Topic 0 is Keccak("MarketCreated(uint256,string,uint256)")
-            // But easier: `receipt.logs`.
-            // We can rely on the fact it's the last event?
-            // Let's assume the event emits the ID in the first indexed topic (after event sig).
-
-            // Actually, querying the contract for `nextMarketId - 1` is a safer hack for a single-admin system.
-            // Let's do that for simplicity if parsing is hard.
-            // Or better: Pass the ID 0 to backend and let backend figure it out? No.
-
-            // Let's try to find the ID from the logs if possible, or fallback to manual input or "latest".
-            // Since this is key, let's just use a hardcoded assumption for this iteration:
-            // "The ID is embedded in the logs".
-
-            // Hack for MVP verification:
-            // Fetch `nextMarketId` from contract?
-            // We don't have a hook for that.
-
-            // Let's just create the market in backend with a PROVISIONAL ID and then update it?
-            // No, consistency is key.
-
-            // Let's look at logs.
-            // event MarketCreated(uint256 indexed id, ...);
-            // The ID is the 1st indexed argument.
-            // So log.topics[1] should be the ID (in hex).
-
             const logs = txReceipt.logs;
             let marketId = null;
 
-            // Helper to parsing
-            // PolybetMarket Address
-            const marketLog = logs.find((l: any) => l.address.toLowerCase() === '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0'.toLowerCase());
-            // Better to match topic[0]
-
+            // Basic log check
             if (logs.length > 0) {
-                // Assuming it's the last log or finding the one with our event signature
-                // MarketCreated signature part...
-                // Let's just grab the integer from topic[1] of the relevant log.
-
-                // For now, let's fetch ALL markets from backend, see the max ID, and increment? 
-                // No, that's backend ID. We need Blockchain ID.
-
-                // OK, strategy: just blindly trust that topic[1] of the MarketCreated event is the ID.
-                // We need to implement a parser or just use a helper.
-
-                // Wait! wagmi's `useWaitForTransactionReceipt` returns parsed logs if ABI is provided?
-                // No.
-
-                // Let's try to read the Hex.
-                const targetLog = logs[logs.length - 1]; // unsafe but probable
+                const targetLog = logs[logs.length - 1];
                 const idHex = targetLog.topics[1];
                 marketId = parseInt(idHex, 16);
             }
@@ -214,18 +192,20 @@ export default function AdminPage() {
         <main className="min-h-screen bg-neutral-50 dark:bg-zinc-950 pb-20">
             <Header />
 
-            <div className="max-w-2xl mx-auto px-4 py-8">
+            <div className="max-w-4xl mx-auto px-4 py-8">
+                {/* CREATE SECTION */}
                 <div className="flex items-center gap-3 mb-8">
                     <div className="p-3 bg-blue-600 rounded-lg text-white">
                         <Upload size={24} />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Create Market</h1>
-                        <p className="text-sm text-zinc-500">Deploy a new prediction market to the blockchain</p>
+                        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Admin Dashboard</h1>
+                        <p className="text-sm text-zinc-500">Create and Resolve Markets</p>
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 shadow-sm">
+                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 shadow-sm mb-12">
+                    <h2 className="text-xl font-bold mb-6 text-zinc-900 dark:text-white">🚀 Create New Market</h2>
                     <div className="space-y-6">
 
                         {/* Question */}
@@ -310,16 +290,29 @@ export default function AdminPage() {
                             </div>
                         </div>
 
-                        {/* Image */}
+                        {/* Image (Magic) */}
                         <div>
                             <label className="block text-sm font-bold text-zinc-900 dark:text-white mb-2">Image URL</label>
-                            <input
-                                name="image"
-                                value={formData.image}
-                                onChange={handleChange}
-                                placeholder="https://..."
-                                className="w-full px-4 py-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    name="image"
+                                    value={formData.image}
+                                    onChange={handleChange}
+                                    placeholder="https://..."
+                                    className="flex-1 px-4 py-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                />
+                                <button
+                                    onClick={handleGenerateImage}
+                                    className="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-95"
+                                    title="Generate with AI"
+                                >
+                                    <Wand2 size={20} />
+                                    Magic
+                                </button>
+                            </div>
+                            {formData.image && (
+                                <img src={formData.image} alt="Preview" className="mt-4 h-48 w-full object-cover rounded-lg border border-zinc-200 dark:border-zinc-700" />
+                            )}
                         </div>
 
                         {/* Submit Button */}
@@ -345,6 +338,52 @@ export default function AdminPage() {
 
                     </div>
                 </div>
+
+                {/* RESOLVE SECTION */}
+                <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 shadow-sm">
+                    <h2 className="text-xl font-bold mb-6 text-zinc-900 dark:text-white">⚖️ Resolve Markets</h2>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-zinc-200 dark:border-zinc-800">
+                                    <th className="pb-4 font-bold text-zinc-500 dark:text-zinc-400">ID</th>
+                                    <th className="pb-4 font-bold text-zinc-500 dark:text-zinc-400">Question</th>
+                                    <th className="pb-4 font-bold text-zinc-500 dark:text-zinc-400 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                                {markets.map((market: any) => (
+                                    <tr key={market.id} className="group">
+                                        <td className="py-4 font-mono text-sm text-zinc-500">{market.id}</td>
+                                        <td className="py-4 font-medium text-zinc-900 dark:text-white max-w-md truncate pr-4">
+                                            {market.question}
+                                        </td>
+                                        <td className="py-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleResolve(market.id, 1)}
+                                                    className="px-3 py-1.5 text-xs font-bold bg-green-100 text-green-700 hover:bg-green-200 rounded-md transition-colors"
+                                                >
+                                                    Resolve YES
+                                                </button>
+                                                <button
+                                                    onClick={() => handleResolve(market.id, 2)}
+                                                    className="px-3 py-1.5 text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 rounded-md transition-colors"
+                                                >
+                                                    Resolve NO
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {markets.length === 0 && (
+                            <div className="text-center py-8 text-zinc-500">No markets found</div>
+                        )}
+                    </div>
+                </div>
+
             </div>
         </main>
     );
