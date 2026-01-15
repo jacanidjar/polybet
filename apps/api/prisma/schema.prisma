@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -15,6 +15,8 @@ model User {
   username  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  pnl       Float    @default(0) // Realized Profit & Loss
   
   trades    Trade[]
   positions Position[]
@@ -29,7 +31,7 @@ model Market {
   category    String
   image       String?
   
-  volume      Decimal  @default(0) @db.Decimal(20, 2)
+  volume      Decimal  @default(0)
   chance      Float    @default(50)
   
   endDate     DateTime?
@@ -39,6 +41,7 @@ model Market {
   trades      Trade[]
   positions   Position[]
   comments    Comment[]
+  history     MarketHistory[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -48,9 +51,9 @@ model Trade {
   id        String   @id @default(uuid())
   type      String   // "BUY" or "SELL"
   outcome   String   // "YES" or "NO"
-  amount    Decimal  @db.Decimal(20, 2)
+  amount    Decimal
   price     Float
-  shares    Decimal  @db.Decimal(20, 2)
+  shares    Decimal
   
   userId    String
   user      User     @relation(fields: [userId], references: [id])
@@ -64,7 +67,7 @@ model Trade {
 model Position {
   id        String   @id @default(uuid())
   outcome   String   // "YES" or "NO"
-  shares    Decimal  @db.Decimal(20, 2)
+  shares    Decimal
   avgPrice  Float
   
   userId    String
@@ -86,4 +89,33 @@ model Comment {
   
   marketId  Int
   market    Market   @relation(fields: [marketId], references: [id])
+
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  
+  likes     CommentLike[]
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, commentId])
+}
+
+model MarketHistory {
+  id        String   @id @default(uuid())
+  price     Float
+  outcome   String   // "YES" or "NO"
+  
+  marketId  Int
+  market    Market   @relation(fields: [marketId], references: [id])
+  
+  createdAt DateTime @default(now())
 }

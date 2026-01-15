@@ -1,9 +1,9 @@
-# Implementação: Sistema de Comentários
 
 Status: In Progress
 
 ## Todo
 - [x] **Backend: Comments Module** <!-- id: 0 -->
+    - [x] Switch to SQLite (Remove Docker) <!-- id: 16 -->
     - [x] Atualizar `schema.prisma` <!-- id: 1 -->
     - [x] Criar `comments.service.ts` <!-- id: 2 -->
     - [x] Criar `comments.controller.ts` <!-- id: 3 -->
@@ -11,3 +11,61 @@ Status: In Progress
 - [x] **Frontend: Integration** <!-- id: 5 -->
     - [x] Criar `CommentsSection.tsx` <!-- id: 6 -->
     - [x] Atualizar `markets/[id]/page.tsx` (Fix + Comments) <!-- id: 7 -->
+- [x] **Blockchain: Local Testing Setup** <!-- id: 8 -->
+    - [x] Add Localhost to Wagmi/Privy config <!-- id: 9 -->
+    - [x] Add useUSDCBalance and useMintUSDC hooks <!-- id: 10 -->
+    - [x] Implement Faucet Component <!-- id: 11 -->
+    - [x] Update TradingWidget to use real contract calls (localhost) <!-- id: 12 -->
+    - [x] **Backend: Faucet API** (Bypass MetaMask Checks) <!-- id: 13 -->
+        - [x] Create Faucet Module (Controller/Service) <!-- id: 14 -->
+        - [x] Update Frontend Faucet to use API <!-- id: 15 -->
+    - [x] **Setup: Stabilization** <!-- id: 17 -->
+        - [x] Remove Docker dependency <!-- id: 18 -->
+        - [x] Auto-install Blockchain dependencies in polybet.bat <!-- id: 19 -->
+        - [x] Manual Repair (repair.bat) executed <!-- id: 20 -->
+        - [x] **Fix: Contract Address Sync** (JSON Export) <!-- id: 21 -->
+        - [x] **Fix: Market Data Sync** (Seed Bitcoin/Fed on Chain) <!-- id: 22 -->
+    - [x] **Portfolio Improvements** <!-- id: 23 -->
+        - [x] Fix "Sell" not returning funds (Add Blockchain Tx) <!-- id: 24 -->
+        - [x] Show User Balance in Portfolio UI <!-- id: 25 -->
+        - [x] **New: Claim Winnings** (Redeem Feature) <!-- id: 26 -->
+        - [x] **UI Polish: Header Redesign** (Polymarket Style) <!-- id: 27 -->
+        - [x] **User Menu & Profile Link** <!-- id: 28 -->
+        - [x] **Balance Protection & Loading States** <!-- id: 29 -->
+        - [x] **Market Resolution Debug Tool** <!-- id: 30 -->
+- [x] **Search & Browse Overhaul** <!-- id: 31 -->
+    - [x] **Backend: Search & Sort API** (`markets.service.ts`) <!-- id: 32 -->
+    - [x] **Frontend: Global Search** (Header + URL Sync) <!-- id: 33 -->
+    - [x] **Frontend: Browse Filters** (New, Trending, etc.) <!-- id: 34 -->
+    - [x] **Frontend: Topics Grid** (Visual Categories) <!-- id: 35 -->
+- [x] **Market Page Redesign (Polymarket Style)** <!-- id: 36 -->
+    - [x] **Components: Reusable Accordion (Rules/Context)** <!-- id: 37 -->
+    - [x] **Components: Trading Widget Styling (Pills/Toggle)** <!-- id: 38 -->
+    - [x] **Page: 2-Column Layout & Vertical Flow** <!-- id: 39 -->
+- [x] **SEO Friendly URLs (Slug Support)** <!-- id: 40 -->
+- [x] **Admin Dashboard (Market Creation)** <!-- id: 41 -->
+    - [x] **Backend:** `POST /markets` with Blockchain ID Sync <!-- id: 42 -->
+    - [x] **Frontend:** `useCreateMarket` Hook <!-- id: 43 -->
+    - [x] **Frontend:** `/admin` Page with Form & Logic <!-- id: 44 -->
+- [x] **Admin: Market Resolution** <!-- id: 45 -->
+    - [x] **Frontend:** List active markets in Admin Dashboard <!-- id: 46 -->
+    - [x] **Frontend:** Resolve Actions (Yes/No buttons) <!-- id: 47 -->
+    - [x] **Integration:** Connect `useResolveMarket` hook <!-- id: 48 -->
+- [ ] **Admin: Auto-Image Generation** (REMOVED: User Request due to API instability) <!-- id: 49 -->
+    - [x] **Feature:** "Generate Image" button uses Pollinations.ai API (Removed) <!-- id: 50 -->
+- [x] **SEO & Social (OG Tags)** <!-- id: 51 -->
+    - [x] **Frontend:** Implement `generateMetadata` in Market Page <!-- id: 52 -->
+    - [x] **Frontend:** Dynamic OpenGraph Image (Title + Chance) <!-- id: 53 -->
+- [x] **Feature: Historical Price Charts** <!-- id: 54 -->
+    - [x] **Backend:** Add `MarketHistory` model for price snapshots <!-- id: 55 -->
+    - [x] **Backend:** Service method to record price on trade/cron <!-- id: 56 -->
+    - [x] **Frontend:** Integrate Recharts for Line Chart Visualization <!-- id: 57 -->
+- [x] **Feature: Leaderboard (Top Traders)** <!-- id: 58 -->
+    - [x] **Backend:** Calculate User P&L (Portfolio Value vs Cost Basis) <!-- id: 59 -->
+    - [x] **Frontend:** `/leaderboard` page with sorting <!-- id: 60 -->
+- [x] **Feature: Social Expansion** <!-- id: 61 -->
+    - [x] **Backend:** Add `Like` model and `Reply` hierarchy to Comments <!-- id: 62 -->
+    - [x] **Frontend:** UI for threaded comments and user profiles <!-- id: 63 -->
+- [x] **Polish: Mobile Responsiveness** <!-- id: 64 -->
+    - [x] **Frontend:** Fix Table layouts on mobile <!-- id: 65 -->
+    - [x] **Frontend:** Optimize Trading Widget for touch <!-- id: 66 -->

@@ -1,8 +1,7 @@
-
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useAccount, useDisconnect } from 'wagmi';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { toast } from '@/lib/toast';
 
 interface User {
@@ -14,62 +13,77 @@ interface User {
 interface AuthContextType {
     user: User | null;
     isLoading: boolean;
-    login: (address: string) => Promise<void>;
+    login: () => void;
     logout: () => void;
+    authenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const { address, isConnected } = useAccount();
-    const { disconnect } = useDisconnect();
+    const [isBackendLoading, setIsBackendLoading] = useState(false);
 
-    const login = async (userAddress: string) => {
-        if (!userAddress) return;
+    // Privy hooks
+    const { login: privyLogin, logout: privyLogout, authenticated, user: privyUser, ready } = usePrivy();
+    const { wallets } = useWallets();
 
-        setIsLoading(true);
+    useEffect(() => {
+        console.log("Auth State:", { ready, authenticated, user: !!privyUser });
+    }, [ready, authenticated, privyUser]);
+
+    const syncWithBackend = async (address: string) => {
+        if (!address || isBackendLoading) return;
+
+        setIsBackendLoading(true);
         try {
-            // Using localhost:3001 as strictly defined in plan/previous investigation
             const res = await fetch('http://localhost:3001/users/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: userAddress })
+                body: JSON.stringify({ address })
             });
 
-            if (!res.ok) throw new Error("Login failed");
+            if (!res.ok) throw new Error("Backend login failed");
 
             const userData = await res.json();
             setUser(userData);
-            toast.success(`Welcome back!`);
-            console.log("Auth: Logged in as", userData);
+            console.log("Auth: Backend synced as", userData);
         } catch (error) {
-            console.error("Auth Login Error:", error);
-            toast.error("Failed to login to backend");
-            disconnect(); // Force disconnect wallet if backend auth fails
+            console.error("Backend Sync Error:", error);
+            toast.error("Failed to sync with backend");
         } finally {
-            setIsLoading(false);
+            setIsBackendLoading(false);
         }
     };
 
     const logout = () => {
         setUser(null);
-        disconnect();
+        privyLogout();
         toast.success("Logged out");
     };
 
-    // Auto-login when wallet connects
+    // Effect to sync when Privy is authenticated
     useEffect(() => {
-        if (isConnected && address && !user && !isLoading) {
-            login(address);
-        } else if (!isConnected && user) {
+        const address = privyUser?.wallet?.address;
+
+        if (ready && authenticated && address) {
+            console.log("Auth: Syncing with address", address);
+            syncWithBackend(address);
+        } else if (ready && authenticated && !address) {
+            console.log("Auth: Authenticated but no wallet address yet. Waiting for embedded wallet...");
+        } else if (ready && !authenticated) {
             setUser(null);
         }
-    }, [isConnected, address]);
+    }, [ready, authenticated, privyUser, wallets]); // Adding wallets to dependency list
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+        <AuthContext.Provider value={{
+            user,
+            isLoading: !ready || isBackendLoading,
+            login: privyLogin,
+            logout,
+            authenticated
+        }}>
             {children}
         </AuthContext.Provider>
     );

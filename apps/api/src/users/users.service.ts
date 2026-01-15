@@ -49,11 +49,31 @@ export class UsersService {
         });
 
         if (!user) {
-            // Return empty if user doesn't exist yet (frontend check) or create?
-            // Better to return null or throw.
-            throw new NotFoundException('User not found');
+            // Gracefully handle new users who haven't traded yet
+            return {
+                address: normalizedAddress,
+                positions: [],
+                comments: [],
+                trades: []
+            };
         }
 
         return user;
+    }
+
+    async getLeaderboard() {
+        return this.prisma.user.findMany({
+            orderBy: { pnl: 'desc' },
+            take: 50,
+            select: {
+                id: true,
+                username: true,
+                address: true,
+                pnl: true,
+                _count: {
+                    select: { trades: true }
+                }
+            }
+        });
     }
 }

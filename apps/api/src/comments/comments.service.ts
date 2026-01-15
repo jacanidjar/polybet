@@ -9,7 +9,7 @@ export class CommentsService {
         private usersService: UsersService,
     ) { }
 
-    async create(userAddress: string, marketId: number, content: string) {
+    async create(userAddress: string, marketId: number, content: string, parentId?: string) {
         if (!content) throw new BadRequestException('Content is required');
 
         // Ensure user exists
@@ -20,6 +20,7 @@ export class CommentsService {
                 content,
                 userId: user.id,
                 marketId,
+                parentId
             },
             include: {
                 user: true
@@ -32,8 +33,43 @@ export class CommentsService {
             where: { marketId },
             orderBy: { createdAt: 'desc' },
             include: {
-                user: true
+                user: true,
+                likes: true,
+                replies: {
+                    include: {
+                        user: true,
+                        likes: true
+                    }
+                }
             }
         });
+    }
+
+    async toggleLike(userAddress: string, commentId: string) {
+        const user = await this.usersService.findOrCreate(userAddress);
+
+        const existingLike = await this.prisma.commentLike.findUnique({
+            where: {
+                userId_commentId: {
+                    userId: user.id,
+                    commentId
+                }
+            }
+        });
+
+        if (existingLike) {
+            await this.prisma.commentLike.delete({
+                where: { id: existingLike.id }
+            });
+            return { liked: false };
+        } else {
+            await this.prisma.commentLike.create({
+                data: {
+                    userId: user.id,
+                    commentId
+                }
+            });
+            return { liked: true };
+        }
     }
 }

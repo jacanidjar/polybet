@@ -34,7 +34,8 @@ export class TradesController {
     }
 
     @Get()
-    async findAll(@Query('marketId') marketId?: string) {
-        return this.tradesService.findAll(marketId ? Number(marketId) : undefined);
+    @Get()
+    async findAll(@Query('marketId') marketId?: string, @Query('userId') userId?: string) {
+        return this.tradesService.findAll(marketId ? Number(marketId) : undefined, userId);
     }
 }

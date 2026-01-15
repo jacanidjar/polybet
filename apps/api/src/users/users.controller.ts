@@ -13,6 +13,11 @@ export class UsersController {
         return this.usersService.findOrCreate(body.address);
     }
 
+    @Get('leaderboard')
+    async getLeaderboard() {
+        return this.usersService.getLeaderboard();
+    }
+
     @Get(':address/portfolio')
     async getPortfolio(@Param('address') address: string) {
         return this.usersService.getPortfolio(address);

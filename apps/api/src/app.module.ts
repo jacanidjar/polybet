@@ -7,8 +7,10 @@ import { TradesModule } from './trades/trades.module';
 import { UsersModule } from './users/users.module';
 import { CommentsModule } from './comments/comments.module';
 
+import { FaucetModule } from './faucet/faucet.module';
+
 @Module({
-    imports: [PrismaModule, MarketsModule, TradesModule, UsersModule, CommentsModule],
+    imports: [PrismaModule, MarketsModule, TradesModule, UsersModule, CommentsModule, FaucetModule],
     controllers: [AgentController],
     providers: [AgentService],
 })

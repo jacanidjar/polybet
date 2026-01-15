@@ -6,7 +6,7 @@ interface CreateTradeDto {
     marketId: number;
     outcome: 'YES' | 'NO';
     amount: number;
-    type: 'BUY' | 'SELL';
+    type: 'BUY' | 'SELL' | 'CLAIM';
     price: number; // In a real app, this should be calculated on server
 }
 
@@ -22,7 +22,8 @@ export class TradesService {
         if (!market) throw new NotFoundException('Market not found');
 
         const amountDecimal = dto.amount;
-        const shares = dto.amount / dto.price;
+        // For CLAIM, price/shares logic is different (usually total payout) but we can accept 0
+        const shares = dto.type === 'CLAIM' ? 0 : dto.amount / dto.price;
 
         return this.prisma.$transaction(async (tx) => {
             // 1. Create Trade Record
@@ -49,12 +50,34 @@ export class TradesService {
                 },
             });
 
-            if (dto.type === 'SELL') {
+            if (dto.type === 'CLAIM') {
+                if (existingPosition) {
+                    // CLAIM: Win $1.00 per share.
+                    // PnL = (1.00 - AvgPrice) * Shares
+                    const profit = (1.0 - existingPosition.avgPrice) * Number(existingPosition.shares);
+
+                    await tx.user.update({
+                        where: { id: dto.userId },
+                        data: { pnl: { increment: profit } }
+                    });
+
+                    await tx.position.delete({
+                        where: { id: existingPosition.id }
+                    });
+                }
+            } else if (dto.type === 'SELL') {
                 if (!existingPosition || Number(existingPosition.shares) < shares) {
                     throw new BadRequestException('Insufficient shares to sell');
                 }
 
-                // SELL: Decrement shares, AvgPrice stays same
+                // SELL: Realized PnL = (SellPrice - AvgPrice) * Shares
+                const profit = (dto.price - existingPosition.avgPrice) * shares;
+
+                await tx.user.update({
+                    where: { id: dto.userId },
+                    data: { pnl: { increment: profit } }
+                });
+
                 const newShares = Number(existingPosition.shares) - shares;
 
                 if (newShares > 0) {
@@ -63,17 +86,16 @@ export class TradesService {
                         data: { shares: newShares }
                     });
                 } else {
-                    // Fully closed
                     await tx.position.delete({
                         where: { id: existingPosition.id }
                     });
                 }
             } else {
-                // BUY: Increment shares, Update AvgPrice
+                // BUY: No PnL impact yet (Unrealized)
                 if (existingPosition) {
                     const totalShares = Number(existingPosition.shares) + shares;
                     const currentCost = Number(existingPosition.shares) * existingPosition.avgPrice;
-                    const newCost = dto.amount; // Cost of this buy
+                    const newCost = dto.amount;
                     const newAvgPrice = (currentCost + newCost) / totalShares;
 
                     await tx.position.update({
@@ -104,14 +126,28 @@ export class TradesService {
                 }
             });
 
+            // 4. Record Price History
+            // We record the price of the outcome that was traded.
+            // Ideally we'd record both YES and NO prices, but for now we record the traded one.
+            await tx.marketHistory.create({
+                data: {
+                    marketId: dto.marketId,
+                    outcome: dto.outcome,
+                    price: dto.price,
+                }
+            });
+
             return trade;
         });
     }
 
-    async findAll(marketId?: number) {
+    async findAll(marketId?: number, userId?: string) {
         return this.prisma.trade.findMany({
-            where: marketId ? { marketId } : undefined,
-            take: 50,
+            where: {
+                ...(marketId ? { marketId } : {}),
+                ...(userId ? { userId } : {}),
+            },
+            take: 1000, // Increased limit for history
             orderBy: { createdAt: 'desc' },
             include: {
                 user: true,
