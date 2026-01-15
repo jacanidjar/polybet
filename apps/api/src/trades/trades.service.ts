@@ -52,7 +52,15 @@ export class TradesService {
 
             if (dto.type === 'CLAIM') {
                 if (existingPosition) {
-                    // CLAIM: Claims all winnings, shares become 0. Delete position.
+                    // CLAIM: Win $1.00 per share.
+                    // PnL = (1.00 - AvgPrice) * Shares
+                    const profit = (1.0 - existingPosition.avgPrice) * Number(existingPosition.shares);
+
+                    await tx.user.update({
+                        where: { id: dto.userId },
+                        data: { pnl: { increment: profit } }
+                    });
+
                     await tx.position.delete({
                         where: { id: existingPosition.id }
                     });
@@ -62,7 +70,14 @@ export class TradesService {
                     throw new BadRequestException('Insufficient shares to sell');
                 }
 
-                // SELL: Decrement shares, AvgPrice stays same
+                // SELL: Realized PnL = (SellPrice - AvgPrice) * Shares
+                const profit = (dto.price - existingPosition.avgPrice) * shares;
+
+                await tx.user.update({
+                    where: { id: dto.userId },
+                    data: { pnl: { increment: profit } }
+                });
+
                 const newShares = Number(existingPosition.shares) - shares;
 
                 if (newShares > 0) {
@@ -71,17 +86,16 @@ export class TradesService {
                         data: { shares: newShares }
                     });
                 } else {
-                    // Fully closed
                     await tx.position.delete({
                         where: { id: existingPosition.id }
                     });
                 }
             } else {
-                // BUY: Increment shares, Update AvgPrice
+                // BUY: No PnL impact yet (Unrealized)
                 if (existingPosition) {
                     const totalShares = Number(existingPosition.shares) + shares;
                     const currentCost = Number(existingPosition.shares) * existingPosition.avgPrice;
-                    const newCost = dto.amount; // Cost of this buy
+                    const newCost = dto.amount;
                     const newAvgPrice = (currentCost + newCost) / totalShares;
 
                     await tx.position.update({
@@ -109,6 +123,17 @@ export class TradesService {
                 where: { id: dto.marketId },
                 data: {
                     volume: { increment: amountDecimal }
+                }
+            });
+
+            // 4. Record Price History
+            // We record the price of the outcome that was traded.
+            // Ideally we'd record both YES and NO prices, but for now we record the traded one.
+            await tx.marketHistory.create({
+                data: {
+                    marketId: dto.marketId,
+                    outcome: dto.outcome,
+                    price: dto.price,
                 }
             });
 

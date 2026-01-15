@@ -46,32 +46,7 @@ export default function AdminPage() {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    // Magic Image Generator
-    const handleGenerateImage = () => {
-        if (!formData.question) return showErrorToast("Enter a question first");
 
-        // 1. Clear current image to force UI update
-        setFormData(prev => ({ ...prev, image: '' }));
-
-        // 2. Inject random noise directly into the prompt to bypass SERVER-SIDE caching
-        const randomNoise = Math.floor(Math.random() * 10000);
-        // "News illustration" prefix helps context. Model 'turbo' is fast and good for variety.
-        const promptText = `Editorial news illustration of: ${formData.question}, detailed, 4k, v-${randomNoise}`;
-        const prompt = encodeURIComponent(promptText);
-
-        const randomSeed = Math.floor(Math.random() * 1000000);
-        const timestamp = Date.now();
-
-        // 2. Wait 150ms then set new URL
-        setTimeout(() => {
-            // Reverting to Pollinations (Turbo Model) now that we know the UI works.
-            // Using 'turbo' model and specific seed/timestamp to ensure uniqueness.
-            // If the Robot appears, it means the API filtered the prompt content.
-            const url = `https://image.pollinations.ai/prompt/${prompt}?width=1200&height=630&nologo=true&seed=${randomSeed}&t=${timestamp}&model=turbo`;
-            setFormData(prev => ({ ...prev, image: url }));
-            showSuccessToast("Magic Image Generated! 🪄");
-        }, 150);
-    };
 
     // Handle Resolve
     const handleResolve = async (marketId: number, outcomeIndex: number) => {
@@ -290,26 +265,16 @@ export default function AdminPage() {
                             </div>
                         </div>
 
-                        {/* Image (Magic) */}
+                        {/* Image URL */}
                         <div>
                             <label className="block text-sm font-bold text-zinc-900 dark:text-white mb-2">Image URL</label>
-                            <div className="flex gap-2">
-                                <input
-                                    name="image"
-                                    value={formData.image}
-                                    onChange={handleChange}
-                                    placeholder="https://..."
-                                    className="flex-1 px-4 py-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                />
-                                <button
-                                    onClick={handleGenerateImage}
-                                    className="px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold flex items-center gap-2 transition-colors shadow-sm active:scale-95"
-                                    title="Generate with AI"
-                                >
-                                    <Wand2 size={20} />
-                                    Magic
-                                </button>
-                            </div>
+                            <input
+                                name="image"
+                                value={formData.image}
+                                onChange={handleChange}
+                                placeholder="https://..."
+                                className="w-full px-4 py-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
                             {formData.image && (
                                 <img src={formData.image} alt="Preview" className="mt-4 h-48 w-full object-cover rounded-lg border border-zinc-200 dark:border-zinc-700" />
                             )}

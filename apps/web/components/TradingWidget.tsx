@@ -176,13 +176,13 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                     {orderType === 'buy' ? 'Buy' : 'Sell'}
                 </span>
 
-                <div className="ml-auto flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg">
+                <div className="ml-auto flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1.5 rounded-xl">
                     <button
                         onClick={() => setOrderType('buy')}
                         className={cn(
-                            "px-4 py-1 text-xs font-bold rounded-md transition-all",
+                            "px-6 py-2 text-sm font-bold rounded-lg transition-all",
                             orderType === 'buy'
-                                ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-green-400 shadow-sm" // Green text for active
+                                ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-green-400 shadow-sm"
                                 : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
                         )}
                     >
@@ -191,9 +191,9 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
                     <button
                         onClick={() => setOrderType('sell')}
                         className={cn(
-                            "px-4 py-1 text-xs font-bold rounded-md transition-all",
+                            "px-6 py-2 text-sm font-bold rounded-lg transition-all",
                             orderType === 'sell'
-                                ? "bg-white dark:bg-zinc-700 text-red-600 dark:text-red-400 shadow-sm" // Red text for active
+                                ? "bg-white dark:bg-zinc-700 text-red-600 dark:text-red-400 shadow-sm"
                                 : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
                         )}
                     >

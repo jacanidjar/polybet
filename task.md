@@ -51,8 +51,21 @@ Status: In Progress
     - [x] **Frontend:** List active markets in Admin Dashboard <!-- id: 46 -->
     - [x] **Frontend:** Resolve Actions (Yes/No buttons) <!-- id: 47 -->
     - [x] **Integration:** Connect `useResolveMarket` hook <!-- id: 48 -->
-- [x] **Admin: Auto-Image Generation** <!-- id: 49 -->
-    - [x] **Feature:** "Generate Image" button uses Pollinations.ai API <!-- id: 50 -->
+- [ ] **Admin: Auto-Image Generation** (REMOVED: User Request due to API instability) <!-- id: 49 -->
+    - [x] **Feature:** "Generate Image" button uses Pollinations.ai API (Removed) <!-- id: 50 -->
 - [x] **SEO & Social (OG Tags)** <!-- id: 51 -->
     - [x] **Frontend:** Implement `generateMetadata` in Market Page <!-- id: 52 -->
     - [x] **Frontend:** Dynamic OpenGraph Image (Title + Chance) <!-- id: 53 -->
+- [x] **Feature: Historical Price Charts** <!-- id: 54 -->
+    - [x] **Backend:** Add `MarketHistory` model for price snapshots <!-- id: 55 -->
+    - [x] **Backend:** Service method to record price on trade/cron <!-- id: 56 -->
+    - [x] **Frontend:** Integrate Recharts for Line Chart Visualization <!-- id: 57 -->
+- [x] **Feature: Leaderboard (Top Traders)** <!-- id: 58 -->
+    - [x] **Backend:** Calculate User P&L (Portfolio Value vs Cost Basis) <!-- id: 59 -->
+    - [x] **Frontend:** `/leaderboard` page with sorting <!-- id: 60 -->
+- [x] **Feature: Social Expansion** <!-- id: 61 -->
+    - [x] **Backend:** Add `Like` model and `Reply` hierarchy to Comments <!-- id: 62 -->
+    - [x] **Frontend:** UI for threaded comments and user profiles <!-- id: 63 -->
+- [x] **Polish: Mobile Responsiveness** <!-- id: 64 -->
+    - [x] **Frontend:** Fix Table layouts on mobile <!-- id: 65 -->
+    - [x] **Frontend:** Optimize Trading Widget for touch <!-- id: 66 -->

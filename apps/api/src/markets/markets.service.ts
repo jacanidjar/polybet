@@ -131,4 +131,16 @@ export class MarketsService {
         });
         return { message: 'All markets reset to OPEN' };
     }
+
+    async getHistory(id: number) {
+        return this.prisma.marketHistory.findMany({
+            where: { marketId: id },
+            orderBy: { createdAt: 'asc' },
+            select: {
+                price: true,
+                outcome: true,
+                createdAt: true
+            }
+        });
+    }
 }

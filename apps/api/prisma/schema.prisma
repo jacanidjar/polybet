@@ -16,6 +16,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  pnl       Float    @default(0) // Realized Profit & Loss
+  
   trades    Trade[]
   positions Position[]
   comments  Comment[]
@@ -39,6 +41,7 @@ model Market {
   trades      Trade[]
   positions   Position[]
   comments    Comment[]
+  history     MarketHistory[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -86,4 +89,33 @@ model Comment {
   
   marketId  Int
   market    Market   @relation(fields: [marketId], references: [id])
+
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  
+  likes     CommentLike[]
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, commentId])
+}
+
+model MarketHistory {
+  id        String   @id @default(uuid())
+  price     Float
+  outcome   String   // "YES" or "NO"
+  
+  marketId  Int
+  market    Market   @relation(fields: [marketId], references: [id])
+  
+  createdAt DateTime @default(now())
 }

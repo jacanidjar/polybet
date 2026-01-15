@@ -24,6 +24,14 @@ export class MarketsController {
         return this.marketsService.findOne(id);
     }
 
+    @Get(':id/history')
+    async getMarketHistory(@Param('id') id: string) {
+        // Handle slug or ID
+        const market = await this.marketsService.findOne(id);
+        if (!market) return [];
+        return this.marketsService.getHistory(market.id);
+    }
+
     // Endpoint temporário para popular dados
     @Post('seed')
     async seed() {

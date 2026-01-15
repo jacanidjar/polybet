@@ -11,6 +11,7 @@ import { AccordionItem } from "@/components/AccordionItem";
 
 export function MarketPageClient({ id }: { id: string }) {
     const [market, setMarket] = useState<any>(null);
+    const [history, setHistory] = useState<any[]>([]);
     const [relatedMarkets, setRelatedMarkets] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -26,6 +27,13 @@ export function MarketPageClient({ id }: { id: string }) {
                     volume: typeof data.volume === 'string' ? parseFloat(data.volume) : data.volume,
                 };
                 setMarket(formattedMarket);
+
+                // Fetch History
+                const historyRes = await fetch(`http://localhost:3001/markets/${formattedMarket.id}/history`);
+                if (historyRes.ok) {
+                    const historyData = await historyRes.json();
+                    setHistory(historyData);
+                }
 
                 if (formattedMarket.category) {
                     const relatedRes = await fetch(`http://localhost:3001/markets?category=${formattedMarket.category}`);
@@ -117,11 +125,9 @@ export function MarketPageClient({ id }: { id: string }) {
                         {/* Chart Area */}
                         <div className="h-[400px] w-full bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm relative">
                             <div className="absolute top-4 left-4 z-10 flex gap-2">
-                                <button className="px-3 py-1 text-xs font-bold bg-zinc-100 dark:bg-zinc-800 rounded-md text-zinc-900 dark:text-white">1D</button>
-                                <button className="px-3 py-1 text-xs font-bold text-zinc-500 hover:bg-zinc-50">1W</button>
-                                <button className="px-3 py-1 text-xs font-bold text-zinc-500 hover:bg-zinc-50">ALL</button>
+                                <button className="px-3 py-1 text-xs font-bold bg-zinc-100 dark:bg-zinc-800 rounded-md text-zinc-900 dark:text-white">Price History</button>
                             </div>
-                            <PriceChart />
+                            <PriceChart data={history} />
                         </div>
 
                         {/* Mobile Trading Widget */}

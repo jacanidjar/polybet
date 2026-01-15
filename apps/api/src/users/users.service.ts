@@ -60,4 +60,20 @@ export class UsersService {
 
         return user;
     }
+
+    async getLeaderboard() {
+        return this.prisma.user.findMany({
+            orderBy: { pnl: 'desc' },
+            take: 50,
+            select: {
+                id: true,
+                username: true,
+                address: true,
+                pnl: true,
+                _count: {
+                    select: { trades: true }
+                }
+            }
+        });
+    }
 }
