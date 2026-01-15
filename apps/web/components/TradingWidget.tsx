@@ -169,100 +169,110 @@ export const TradingWidget = ({ initialOutcome = 'yes', marketId }: TradingWidge
     };
 
     return (
-        <div className="w-full max-w-sm rounded-lg border border-neutral-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex w-full rounded-lg bg-neutral-100 p-1 dark:bg-zinc-800">
-                <button
-                    onClick={() => setOrderType('buy')}
-                    className={cn(
-                        "w-1/2 rounded-md py-1.5 text-sm font-medium transition-all",
-                        orderType === 'buy'
-                            ? "bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
-                    )}
-                >
-                    Buy
-                </button>
-                <button
-                    onClick={() => setOrderType('sell')}
-                    className={cn(
-                        "w-1/2 rounded-md py-1.5 text-sm font-medium transition-all",
-                        orderType === 'sell'
-                            ? "bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white"
-                            : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
-                    )}
-                >
-                    Sell
-                </button>
-            </div>
+        <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 shadow-sm">
+            {/* Header: Buy/Sell Toggle */}
+            <div className="flex w-full mb-6 relative border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                <span className="text-sm font-bold absolute left-0 top-1/2 -translate-y-1/2 text-zinc-900 dark:text-white">
+                    {orderType === 'buy' ? 'Buy' : 'Sell'}
+                </span>
 
-            <div className="mt-6">
-                <label className="text-sm font-medium text-neutral-700 dark:text-zinc-300 mb-2 block">Outcome</label>
-                <div className="flex gap-3">
+                <div className="ml-auto flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg">
                     <button
-                        onClick={() => setOutcome('yes')}
+                        onClick={() => setOrderType('buy')}
                         className={cn(
-                            "flex-1 rounded-lg border px-4 py-4 text-left transition-all",
-                            outcome === 'yes'
-                                ? "border-green-500 bg-green-500/10 dark:bg-green-500/20 ring-2 ring-green-500/20"
-                                : "border-neutral-200 hover:border-neutral-300 dark:border-zinc-700"
+                            "px-4 py-1 text-xs font-bold rounded-md transition-all",
+                            orderType === 'buy'
+                                ? "bg-white dark:bg-zinc-700 text-green-600 dark:text-green-400 shadow-sm" // Green text for active
+                                : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
                         )}
                     >
-                        <div className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">Yes</div>
-                        <div className="text-2xl font-bold text-neutral-900 dark:text-white">{(yesPrice * 100).toFixed(0)}¢</div>
+                        Buy
                     </button>
                     <button
-                        onClick={() => setOutcome('no')}
+                        onClick={() => setOrderType('sell')}
                         className={cn(
-                            "flex-1 rounded-lg border px-4 py-4 text-left transition-all",
-                            outcome === 'no'
-                                ? "border-red-500 bg-red-500/10 dark:bg-red-500/20 ring-2 ring-red-500/20"
-                                : "border-neutral-200 hover:border-neutral-300 dark:border-zinc-700"
+                            "px-4 py-1 text-xs font-bold rounded-md transition-all",
+                            orderType === 'sell'
+                                ? "bg-white dark:bg-zinc-700 text-red-600 dark:text-red-400 shadow-sm" // Red text for active
+                                : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400"
                         )}
                     >
-                        <div className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">No</div>
-                        <div className="text-2xl font-bold text-neutral-900 dark:text-white">{(noPrice * 100).toFixed(0)}¢</div>
+                        Sell
                     </button>
                 </div>
             </div>
 
-            <div className="mt-6">
-                <div className="flex justify-between items-center mb-2">
-                    <label className="text-sm font-medium text-neutral-700 dark:text-zinc-300">Amount (USDC)</label>
-                    <span className="text-xs text-neutral-500 dark:text-zinc-400">
-                        Balance: <span className="font-semibold text-neutral-900 dark:text-white">
-                            {isLoading ? '...' : `$${balanceNum.toFixed(2)}`}
-                        </span>
+            {/* Outcome Selection Pill-Style */}
+            <div className="flex gap-2 mb-6">
+                <button
+                    onClick={() => setOutcome('yes')}
+                    className={cn(
+                        "flex-1 py-2 px-3 rounded-lg text-sm font-bold flex justify-between items-center transition-all border",
+                        outcome === 'yes'
+                            ? "bg-green-500 border-green-600 text-white shadow-md shadow-green-500/20"
+                            : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-300"
+                    )}
+                >
+                    <span>Yes</span>
+                    <span>{(yesPrice * 100).toFixed(0)}¢</span>
+                </button>
+                <button
+                    onClick={() => setOutcome('no')}
+                    className={cn(
+                        "flex-1 py-2 px-3 rounded-lg text-sm font-bold flex justify-between items-center transition-all border",
+                        outcome === 'no'
+                            ? "bg-red-500 border-red-600 text-white shadow-md shadow-red-500/20"
+                            : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:border-zinc-300"
+                    )}
+                >
+                    <span>No</span>
+                    <span>{(noPrice * 100).toFixed(0)}¢</span>
+                </button>
+            </div>
+
+            {/* Amount Input */}
+            <div className="relative">
+                <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                        Amount
+                    </label>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                        <span className="text-zinc-900 dark:text-white">${balanceNum.toFixed(2)}</span> available
                     </span>
                 </div>
-                <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-neutral-200 bg-transparent px-4 py-3 text-lg font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:text-white transition-all"
-                />
+
+                <div className="relative group">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-lg font-medium">$</span>
+                    <input
+                        type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="0"
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 pl-7 text-xl font-bold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all placeholder:text-zinc-300"
+                    />
+                    <button
+                        onClick={() => setAmount(balanceNum.toString())}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-500 dark:text-zinc-300 px-2 py-1 rounded transition-colors"
+                    >
+                        MAX
+                    </button>
+                </div>
             </div>
 
-            {/* Preview Calculations */}
+            {/* Preview Calculations - Minimalist */}
             {calculations && (
-                <div className="mt-6 rounded-lg bg-neutral-50 dark:bg-zinc-800/50 p-4 space-y-2 border border-neutral-200 dark:border-zinc-700">
+                <div className="mt-4 px-1 space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Shares</span>
-                        <span className="font-semibold text-neutral-900 dark:text-white">{calculations.shares}</span>
+                        <span className="text-zinc-500 dark:text-zinc-400 font-medium">Shares</span>
+                        <span className="font-bold text-zinc-900 dark:text-white">{calculations.shares}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Avg price</span>
-                        <span className="font-semibold text-neutral-900 dark:text-white">{calculations.avgPrice}¢</span>
+                        <span className="text-zinc-500 dark:text-zinc-400 font-medium">Avg price</span>
+                        <span className="font-bold text-zinc-900 dark:text-white">{calculations.avgPrice}¢</span>
                     </div>
-                    <div className="border-t border-neutral-200 dark:border-zinc-700 pt-2 mt-2">
-                        <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Max profit</span>
-                            <span className="font-semibold text-green-600 dark:text-green-400">+${calculations.maxProfit}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm mt-1">
-                            <span className="text-gray-600 dark:text-gray-400">Est. ROI</span>
-                            <span className="font-semibold text-green-600 dark:text-green-400">+{calculations.roi}%</span>
-                        </div>
+                    <div className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-500 dark:text-zinc-400 font-medium">Potential return</span>
+                        <span className="font-bold text-green-600 dark:text-green-400">${calculations.maxProfit} ({calculations.roi}%)</span>
                     </div>
                 </div>
             )}

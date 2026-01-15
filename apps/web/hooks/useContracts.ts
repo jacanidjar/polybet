@@ -146,3 +146,20 @@ export const useResolveMarket = () => {
 
     return { resolve, isPending, hash };
 };
+
+// Hook to Create Market (Admin only)
+export const useCreateMarket = () => {
+    const { writeContractAsync, isPending, data: hash } = useWriteContract();
+
+    // createMarket(string _question, uint256 _endTime, uint256 _initialLiquidity)
+    const createMarketOnChain = async (question: string, endTime: number, initialLiquidity: bigint) => {
+        return writeContractAsync({
+            address: MARKET_ADDRESS as Address,
+            abi: PolybetMarketABI,
+            functionName: 'createMarket',
+            args: [question, BigInt(endTime), initialLiquidity],
+        });
+    };
+
+    return { createMarketOnChain, isPending, hash };
+};

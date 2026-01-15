@@ -6,13 +6,22 @@ export class MarketsController {
     constructor(private readonly marketsService: MarketsService) { }
 
     @Get()
-    findAll(@Query('category') category?: string) {
-        return this.marketsService.findAll(category);
+    findAll(
+        @Query('category') category?: string,
+        @Query('search') search?: string,
+        @Query('sort') sort?: string
+    ) {
+        return this.marketsService.findAll(category, search, sort);
+    }
+
+    @Post()
+    async createMarket(@Body() body: any) {
+        return this.marketsService.create(body);
     }
 
     @Get(':id')
     async getMarket(@Param('id') id: string) {
-        return this.marketsService.findOne(Number(id));
+        return this.marketsService.findOne(id);
     }
 
     // Endpoint temporário para popular dados

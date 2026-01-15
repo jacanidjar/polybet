@@ -20,6 +20,37 @@ export const Header = () => {
         setMounted(true);
     }, []);
 
+    // Live Search Logic
+    const [searchQuery, setSearchQuery] = useState("");
+    const [results, setResults] = useState<any[]>([]); // Any for market type
+    const [isSearching, setIsSearching] = useState(false);
+    const [showResults, setShowResults] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (searchQuery.length > 1) {
+                setIsSearching(true);
+                setShowResults(true);
+                try {
+                    const res = await fetch(`http://localhost:3001/markets?search=${encodeURIComponent(searchQuery)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setResults(data);
+                    }
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setIsSearching(false);
+                }
+            } else {
+                setResults([]);
+                setShowResults(false);
+            }
+        }, 300); // 300ms Debounce
+
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
     const handleDeposit = async () => {
         if (!address) {
             toast.error("Connect wallet first!");
@@ -50,14 +81,86 @@ export const Header = () => {
                         </span>
                     </Link>
 
-                    {/* Search Bar - Proximal to Logo */}
-                    <div className="relative w-full max-w-md hidden md:block">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    {/* Search Bar - Live Dropdown */}
+                    <div className="relative w-full max-w-md hidden md:block group">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" />
                         <input
                             type="text"
                             placeholder="Search markets"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => { if (searchQuery) setShowResults(true); }}
                             className="w-full h-10 rounded-lg bg-zinc-100 dark:bg-zinc-800 border-none py-2 pl-10 pr-4 text-sm outline-none placeholder:text-zinc-500 text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 transition-all"
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    setShowResults(false);
+                                    window.location.href = `/?search=${encodeURIComponent(searchQuery)}`;
+                                }
+                            }}
                         />
+
+                        {/* Live Results Dropdown */}
+                        {showResults && searchQuery && (
+                            <div className="absolute top-12 left-0 right-0 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden z-50">
+                                <div className="p-2">
+                                    <div className="flex gap-2 mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-800 px-2">
+                                        <span className="text-xs font-bold text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">Markets</span>
+                                        <span className="text-xs font-bold text-zinc-400 px-2 py-0.5 rounded cursor-not-allowed">Profiles</span>
+                                    </div>
+
+                                    {isSearching ? (
+                                        <div className="p-4 text-center text-zinc-400 text-xs">Searching...</div>
+                                    ) : results.length > 0 ? (
+                                        <div className="flex flex-col">
+                                            {results.slice(0, 5).map((market) => (
+                                                <Link
+                                                    key={market.id}
+                                                    href={`/markets/${market.slug || market.id}`} // Use slug if available
+                                                    // Checking page.tsx... MarketCard usually has link.
+                                                    // Let's assume /market/[id] or /?marketId=...
+                                                    // safely use /?search for "See all" but for item click?
+                                                    // Let's send to /?search=exact for now or assume /market/id if it existed.
+                                                    // ACTUALLY, usually market card opens a modal or new page.
+                                                    // Let's use a standard link style.
+                                                    onClick={() => setShowResults(false)}
+                                                    className="flex items-center justify-between p-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 rounded-lg group/item transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        {market.image ? (
+                                                            <img src={market.image} className="w-8 h-8 rounded-md object-cover" />
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-md bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-xs">
+                                                                🎲
+                                                            </div>
+                                                        )}
+                                                        <div className="flex flex-col truncate">
+                                                            <span className="text-sm font-medium text-zinc-900 dark:text-white truncate group-hover/item:text-blue-600 transition-colors">
+                                                                {market.question}
+                                                            </span>
+                                                            <span className="text-xs text-zinc-500">
+                                                                {market.category}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-blue-600">
+                                                        {market.chance}%
+                                                    </span>
+                                                </Link>
+                                            ))}
+                                            <Link
+                                                href={`/?search=${encodeURIComponent(searchQuery)}`}
+                                                onClick={() => setShowResults(false)}
+                                                className="mt-2 block p-2 text-center text-xs font-bold text-blue-600 hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg transition-colors border-t border-zinc-100 dark:border-zinc-800"
+                                            >
+                                                See all results ➝
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 text-center text-zinc-400 text-xs">No markets found.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

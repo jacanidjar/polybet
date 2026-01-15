@@ -5,20 +5,75 @@ import { PrismaService } from '../prisma/prisma.service';
 export class MarketsService {
     constructor(private prisma: PrismaService) { }
 
-    async findAll(category?: string) {
-        const where = category && category !== 'All' ? { category } : {};
-        return this.prisma.market.findMany({
-            where,
-            orderBy: { volume: 'desc' }
+    async create(data: any) {
+        return this.prisma.market.create({
+            data: {
+                id: data.id, // Explicitly set ID from Blockchain
+                slug: data.slug,
+                question: data.question,
+                description: data.description,
+                category: data.category,
+                endDate: new Date(data.endDate),
+                image: data.image,
+                chance: 50, // Initial chance
+                volume: 0,
+            }
         });
     }
 
-    async findOne(id: number) {
+    async findAll(category?: string, search?: string, sort?: string) {
+        const where: any = {};
+
+        if (category && category !== 'All') {
+            where.category = category;
+        }
+
+        if (search) {
+            where.question = { contains: search }; // Case insensitive usually depends on DB collation
+        }
+
+        let orderBy: any = { volume: 'desc' }; // Default
+
+        switch (sort) {
+            case 'newest':
+                orderBy = { createdAt: 'desc' };
+                break;
+            case 'ending':
+                orderBy = { endDate: 'asc' };
+                break;
+            case 'liquidity':
+            case 'volume':
+                orderBy = { volume: 'desc' };
+                break;
+            // Add 'chance' or others if needed
+        }
+
+        return this.prisma.market.findMany({
+            where,
+            orderBy
+        });
+    }
+
+    async findOne(idOrSlug: string | number) {
+        // Try to find by ID if it looks like a number
+        if (!isNaN(Number(idOrSlug))) {
+            const market = await this.prisma.market.findUnique({
+                where: { id: Number(idOrSlug) },
+                include: {
+                    trades: {
+                        orderBy: { createdAt: 'asc' }
+                    }
+                }
+            });
+            if (market) return market;
+        }
+
+        // Verify if it's a slug
         return this.prisma.market.findUnique({
-            where: { id },
+            where: { slug: String(idOrSlug) },
             include: {
                 trades: {
-                    orderBy: { createdAt: 'asc' } // History for chart
+                    orderBy: { createdAt: 'asc' }
                 }
             }
         });

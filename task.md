@@ -33,3 +33,17 @@ Status: In Progress
         - [x] **User Menu & Profile Link** <!-- id: 28 -->
         - [x] **Balance Protection & Loading States** <!-- id: 29 -->
         - [x] **Market Resolution Debug Tool** <!-- id: 30 -->
+- [x] **Search & Browse Overhaul** <!-- id: 31 -->
+    - [x] **Backend: Search & Sort API** (`markets.service.ts`) <!-- id: 32 -->
+    - [x] **Frontend: Global Search** (Header + URL Sync) <!-- id: 33 -->
+    - [x] **Frontend: Browse Filters** (New, Trending, etc.) <!-- id: 34 -->
+    - [x] **Frontend: Topics Grid** (Visual Categories) <!-- id: 35 -->
+- [x] **Market Page Redesign (Polymarket Style)** <!-- id: 36 -->
+    - [x] **Components: Reusable Accordion (Rules/Context)** <!-- id: 37 -->
+    - [x] **Components: Trading Widget Styling (Pills/Toggle)** <!-- id: 38 -->
+    - [x] **Page: 2-Column Layout & Vertical Flow** <!-- id: 39 -->
+- [x] **SEO Friendly URLs (Slug Support)** <!-- id: 40 -->
+- [x] **Admin Dashboard (Market Creation)** <!-- id: 41 -->
+    - [x] **Backend:** `POST /markets` with Blockchain ID Sync <!-- id: 42 -->
+    - [x] **Frontend:** `useCreateMarket` Hook <!-- id: 43 -->
+    - [x] **Frontend:** `/admin` Page with Form & Logic <!-- id: 44 -->

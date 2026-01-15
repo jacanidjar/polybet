@@ -55,6 +55,8 @@ const generateAvatarGradient = (address: string) => {
     return `linear-gradient(135deg, ${pair[0]}, ${pair[1]})`;
 };
 
+import { ActionModal } from "@/components/ActionModal";
+
 export default function PortfolioPage() {
     const { user, isLoading: authLoading } = useAuth();
     const [activeTab, setActiveTab] = useState<"positions" | "activity">("positions");
@@ -64,6 +66,12 @@ export default function PortfolioPage() {
     const [sellingId, setSellingId] = useState<number | null>(null);
     const [trades, setTrades] = useState<any[]>([]);
     const [activityFilter, setActivityFilter] = useState<'ALL' | 'BETS' | 'TRANSFERS'>('ALL');
+
+    // Modal States
+    const [sellModalOpen, setSellModalOpen] = useState(false);
+    const [resolveModalOpen, setResolveModalOpen] = useState(false);
+    const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
+    const [resolutionOutcome, setResolutionOutcome] = useState<'YES' | 'NO'>('YES');
 
     // Real P&L Chart Data
     const pnlChartData = useMemo(() => {
@@ -77,42 +85,17 @@ export default function PortfolioPage() {
         const dataPoints: any[] = [];
 
         sorted.forEach(t => {
+            // Metric: "Net Cash Flow" (Invested vs Returned)
+            // Buy = -Cost (Cash Out)
+            // Sell/Claim = +Revenue (Cash In)
+            // This tracks the cumulative realized cash flow of the portfolio.
+
+            const amount = t.amount; // Dollar value
+
             if (t.type === 'SELL' || t.type === 'CLAIM') {
-                // Realized Gain = Received Amount - (Shares * AvgPrice)
-                // We don't have historical AvgPrice easily, so we approximate or use 'price' delta?
-                // Simplification for MVP: Chart "Net Cash Flow" from trading. 
-                // Buy = -Cost, Sell = +Revenue. 
-                // This equals (Revenue - Cost) which is PnL, BUT it dips negative when you hold assets.
-                // To fix visual, we add "Unrealized Value" (Cost Basis) back? 
-                // Let's just chart "Realized PnL" (Cash Out - Cash In for closed trades)
-                // Actually, simplest is "Balance History" approach but focused on PnL.
-
-                // Let's try: Metric = "Net Transfer"
-                // Buy $10 -> -10
-                // Sell $12 -> +12
-                // Net = +2.
-                // This chart will naturally dip negative when you invest, and go positive when you profit.
-                // This is actually "Cumulative Cash Flow".
-                // Users usually want to see "Portfolio Value" (Cash + Assets).
-                // If we assume a starting cash of 0 for the chart tracking:
-                // Buy $10: Cash -10, Asset +10. Value = 0.
-                // Market moves up 10%: Asset becomes 11. Value = 1.
-                // We can't see market moves in history.
-                // So History Line is flat 0 (Total Value) until a Sell happens?
-                // Or we capture the "Realized PnL" only.
-
-                // Let's chart "Realized PnL" only.
-                // Buy: No change to Realized PnL.
-                // Sell: Realized PnL += (SellAmt - (Shares * BuyPrice)).
-                // We need BuyPrice.
-
-                // Fallback: Chart "Volume" or just "Net Cash Flow".
-                // Let's do "Net Cash Flow" (Invested vs Returned).
-                const amount = t.amount; // Dollar value
-                if (t.type === 'BUY') runningPnL -= amount;
-                else runningPnL += amount;
+                runningPnL += amount;
             } else if (t.type === 'BUY') {
-                runningPnL -= t.amount;
+                runningPnL -= amount;
             }
 
             dataPoints.push({
@@ -211,7 +194,27 @@ export default function PortfolioPage() {
 
     useEffect(() => {
         fetchPortfolio();
-    }, [user?.address]);
+
+        // Live Updates Polling (every 10 seconds)
+        const interval = setInterval(() => {
+            if (!document.hidden && !sellModalOpen && !resolveModalOpen) {
+                fetchPortfolio();
+            }
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [user?.address, sellModalOpen, resolveModalOpen]);
+
+    // ... helper ...
+    const LiveBadge = () => (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider border border-green-200 dark:border-green-800">
+            <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            Live
+        </span>
+    );
     const [currentPage, setCurrentPage] = useState(1);
     const ITEMS_PER_PAGE = 5;
 
@@ -258,67 +261,33 @@ export default function PortfolioPage() {
     const { resolve } = useResolveMarket();
     const { refetch: refetchBalance } = useUSDCBalance(user?.address as Address);
 
-    const publicClient = usePublicClient();
+    const handleShare = async () => {
+        if (!stats) return;
 
-    const handleResolve = async (position: Position) => {
-        if (!user) return;
+        const shareText = `🚀 My Polybet Portfolio:\n\n💰 Value: $${stats.value.toFixed(2)}\n📈 Invested: $${stats.invested.toFixed(2)}\n🏆 Biggest Win: $${stats.biggestWin.toFixed(2)}\n\nJoin the action at polybet.app!`;
 
-        // Debug Feature: Ask user who won
-        const winner = prompt("Who won? Type 'YES' or 'NO'", "YES")?.toUpperCase();
-        if (winner !== 'YES' && winner !== 'NO') return;
-
-        const outcomeIndex = winner === 'YES' ? 1 : 2;
-
-        try {
-            // 0. Pre-flight Check
-            const marketData = await publicClient?.readContract({
-                address: MARKET_ADDRESS as Address,
-                abi: PolybetMarketABI,
-                functionName: 'markets',
-                args: [BigInt(position.marketId)]
-            }) as any[];
-
-            const isResolvedOnChain = marketData?.[3];
-            const winnerEnum = marketData?.[4];
-
-            if (isResolvedOnChain) {
-                const winnerStr = winnerEnum === 1 ? 'YES' : (winnerEnum === 2 ? 'NO' : 'NONE');
-                toast(`Already resolved to ${winnerStr} on-chain! Syncing... 🔄`, { icon: '⚠️' });
-
-                await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ resolved: true, winner: winnerStr })
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'My Polybet Portfolio',
+                    text: shareText,
+                    url: 'https://polybet.app'
                 });
-
-                fetchPortfolio();
-                return;
+            } catch (err) {
+                console.error('Share failed', err);
             }
-
-            // 1. Resolve on blockchain
-            await resolve(position.marketId, outcomeIndex);
-
-            // 2. Update backend
-            await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ resolved: true, winner: winner })
-            });
-
-            toast.success(`Market Resolved to ${winner}! 👨‍⚖️`);
-            fetchPortfolio();
-        } catch (error) {
-            console.error(error);
-            toast.error("Failed to resolve market");
+        } else {
+            navigator.clipboard.writeText(shareText);
+            toast.success("Portfolio stats copied to clipboard! 📋");
         }
     };
 
     const handleClaim = async (position: Position) => {
         if (!user || !user.address) return;
-
         try {
+            const outcomeIndex = position.outcome === 'YES' ? 1 : 2; // Logic: 1=YES, 2=NO
+
             // 0. Pre-flight Check
-            const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
             const sharesOnChain = await publicClient?.readContract({
                 address: MARKET_ADDRESS as Address,
                 abi: PolybetMarketABI,
@@ -329,6 +298,7 @@ export default function PortfolioPage() {
             if (sharesOnChain === BigInt(0)) {
                 toast("Already claimed on-chain! Syncing... 🔄", { icon: '⚠️' });
 
+                // Force Sync Backend
                 await fetch('http://localhost:3001/trades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -344,44 +314,45 @@ export default function PortfolioPage() {
 
                 refetchBalance();
                 setTimeout(() => fetchPortfolio(), 1000);
-                return;
+                return; // Stop here!
             }
 
-            // 1. Claim
-            await claim(position.marketId);
-            toast.success("Winnings Claimed! 🏆");
+            // 1. Claim on blockchain
+            await claimWinnings(position.marketId, outcomeIndex);
 
-            // Sync with backend
+            // 2. Sync Backend: Create a CLAIM trade (which removes the position)
+            const claimAmount = position.shares * 1.00; // Always $1.00 per share on win
+
             await fetch('http://localhost:3001/trades', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userAddress: user.address,
+                    userId: user.id,
                     marketId: position.marketId,
                     type: 'CLAIM',
                     outcome: position.outcome,
-                    amount: 0,
-                    price: 1
+                    amount: claimAmount,
+                    price: 1.00
                 })
             });
 
-            refetchBalance();
-            setTimeout(() => {
-                fetchPortfolio();
-                refetchBalance();
-            }, 2000);
-
-        } catch (error: any) {
+            toast.success(`Claimed $${claimAmount.toFixed(2)}!`);
+            fetchPortfolio();
+            refetchBalance(); // Update user wallet balance
+        } catch (error) {
             console.error(error);
             toast.error("Failed to claim winnings");
         }
     };
 
-    const handleSell = async (position: Position) => {
-        if (!user || !user.address) return;
-        if (!confirm(`Sell all shares in "${position.marketQuestion}"?`)) return;
+    // --- Actions Triggered by Modal ---
+    const executeSell = async () => {
+        if (!user || !user.address || !selectedPosition) return;
 
-        setSellingId(position.id);
+        const position = selectedPosition;
+        setSellModalOpen(false); // Close UI immediately
+        setSellingId(position.id); // Show loading state on row
+
         try {
             const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
 
@@ -395,20 +366,19 @@ export default function PortfolioPage() {
 
             if (sharesOnChain === BigInt(0)) {
                 toast("Already sold on-chain! Syncing... 🔄", { icon: '⚠️' });
-
+                // Force Sync Backend
                 await fetch('http://localhost:3001/trades', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         userAddress: user.address,
                         marketId: position.marketId,
-                        type: 'CLAIM', // deletes position
+                        type: 'CLAIM',
                         outcome: position.outcome,
                         amount: 0,
                         price: 1
                     })
                 });
-
                 refetchBalance();
                 setTimeout(() => fetchPortfolio(), 1000);
                 return;
@@ -418,7 +388,7 @@ export default function PortfolioPage() {
             const sharesBigInt = BigInt(Math.floor(position.shares * 1e18));
             await sell(position.marketId, outcomeIndex, sharesBigInt);
 
-            // 2. Record indexer update (Backend)
+            // 2. Record indexer update
             const sellPrice = position.currentPrice;
             const sellAmount = position.shares * sellPrice;
 
@@ -443,15 +413,88 @@ export default function PortfolioPage() {
             toast.error("Failed to sell shares");
         } finally {
             setSellingId(null);
+            setSelectedPosition(null);
         }
+    };
+
+    const executeResolve = async () => {
+        if (!selectedPosition) return;
+        setResolveModalOpen(false);
+
+        const position = selectedPosition;
+        const winner = resolutionOutcome; // From State
+
+        try {
+            const outcomeIndex = position.outcome === 'YES' ? 1 : 2;
+
+            // 0. Pre-flight Check
+            const marketData = await publicClient?.readContract({
+                address: MARKET_ADDRESS as Address,
+                abi: PolybetMarketABI,
+                functionName: 'markets',
+                args: [BigInt(position.marketId)]
+            }) as any;
+
+            if (marketData && marketData.resolved) {
+                toast("Market already resolved on-chain! Syncing... 🔄", { icon: '⚠️' });
+                await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resolved: true, winner: marketData.winner === 1 ? 'YES' : 'NO' })
+                });
+                fetchPortfolio();
+                return;
+            }
+
+            // 1. Resolve on Blockchain
+            // Winner: 1 for YES, 2 for NO
+            await resolve(position.marketId, winner === 'YES' ? 1 : 2);
+
+            // 2. Sync Backend
+            await fetch(`http://localhost:3001/markets/${position.marketId}/resolve`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resolved: true, winner })
+            });
+
+            toast.success(`Market resolved to ${winner}!`);
+            fetchPortfolio();
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to resolve market");
+        } finally {
+            setSelectedPosition(null);
+        }
+    };
+
+    // UI Trigger Handlers
+    const openSellModal = (p: Position) => {
+        setSelectedPosition(p);
+        setSellModalOpen(true);
+    };
+
+    const openResolveModal = (p: Position) => {
+        setSelectedPosition(p);
+        setResolutionOutcome('YES'); // default
+        setResolveModalOpen(true);
     };
 
     const stats = useMemo(() => {
         const invested = positions.reduce((sum, p) => sum + p.invested, 0);
         const value = positions.reduce((sum, p) => sum + p.currentValue, 0);
         const pnl = value - invested;
-        return { invested, value, pnl };
-    }, [positions]);
+
+        // Advanced Stats
+        const biggestWin = trades
+            .filter(t => t.type === 'CLAIM')
+            // Handle potential missing amount with fallback
+            .reduce((max, t) => Math.max(max, t.amount || 0), 0);
+
+        const uniqueMarkets = new Set(trades.map(t => t.marketId)).size;
+        const totalPredictions = uniqueMarkets || positions.length;
+
+        return { invested, value, pnl, biggestWin, totalPredictions };
+    }, [positions, trades]);
 
     if (authLoading || (user && loading && positions.length === 0)) {
         return (
@@ -498,8 +541,9 @@ export default function PortfolioPage() {
                                 ></div>
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">
-                                        <h1 className="text-2xl font-bold dark:text-white">
+                                        <h1 className="text-2xl font-bold dark:text-white flex items-center gap-3">
                                             {user.username || "User"}
+                                            <LiveBadge />
                                         </h1>
                                         <div className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                                             Connect <Share2 size={10} />
@@ -526,7 +570,11 @@ export default function PortfolioPage() {
                                 <button className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400">
                                     <Edit2 size={18} />
                                 </button>
-                                <button className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400">
+                                <button
+                                    onClick={handleShare}
+                                    className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"
+                                    title="Share Portfolio"
+                                >
                                     <Share2 size={18} />
                                 </button>
                             </div>
@@ -539,11 +587,11 @@ export default function PortfolioPage() {
                             </div>
                             <div>
                                 <p className="text-xs text-zinc-400 mb-1 uppercase tracking-tight font-medium">Biggest Win</p>
-                                <p className="text-xl font-bold dark:text-white">—</p>
+                                <p className="text-xl font-bold dark:text-white text-green-500">${stats.biggestWin.toFixed(2)}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-zinc-400 mb-1 uppercase tracking-tight font-medium">Predictions</p>
-                                <p className="text-xl font-bold dark:text-white">{positions.length}</p>
+                                <p className="text-xl font-bold dark:text-white">{stats.totalPredictions}</p>
                             </div>
                         </div>
                     </div>
@@ -727,14 +775,14 @@ export default function PortfolioPage() {
                                                                         <>
                                                                             {/* Active Market Actions */}
                                                                             <button
-                                                                                onClick={() => handleResolve(p)}
+                                                                                onClick={() => openResolveModal(p)}
                                                                                 className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold"
                                                                                 title="Debug: Resolve Market to YES"
                                                                             >
                                                                                 Resolve
                                                                             </button>
                                                                             <button
-                                                                                onClick={() => handleSell(p)}
+                                                                                onClick={() => openSellModal(p)}
                                                                                 disabled={sellingId === p.id}
                                                                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                                                                             >
@@ -833,7 +881,7 @@ export default function PortfolioPage() {
                                                         {t.outcome}
                                                     </td>
                                                     <td className="px-6 py-4 text-right text-sm font-mono dark:text-white">
-                                                        ${t.amount.toFixed(2)}
+                                                        ${(t.amount || 0).toFixed(2)}
                                                     </td>
                                                     <td className="px-6 py-4 text-right text-xs text-zinc-400">
                                                         {new Date(t.createdAt).toLocaleDateString()}
@@ -854,6 +902,121 @@ export default function PortfolioPage() {
                     </div>
                 )}
             </div>
+
+            {/* --- Modals --- */}
+
+            {/* Sell Confirmation Modal */}
+            <ActionModal
+                isOpen={sellModalOpen}
+                onClose={() => setSellModalOpen(false)}
+                title="Confirm Sell"
+                confirmText="Sell Now"
+                onConfirm={executeSell}
+                isDestructive={true}
+            >
+                {selectedPosition && (
+                    <div className="space-y-3">
+                        <p>Are you sure you want to sell your position?</p>
+                        <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg">
+                            <p className="text-sm font-medium dark:text-white">{selectedPosition.marketQuestion}</p>
+                            <div className="flex justify-between mt-2 text-sm text-zinc-500">
+                                <span>Shares: {selectedPosition.shares}</span>
+                                <span>Price: ${(selectedPosition.currentPrice * 100).toFixed(0)}¢</span>
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-700 flex justify-between font-bold dark:text-white">
+                                <span>Total Return:</span>
+                                <span>${selectedPosition.currentValue.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </ActionModal>
+
+            {/* Resolve Market Modal (Debug/Admin) */}
+            <ActionModal
+                isOpen={resolveModalOpen}
+                onClose={() => setResolveModalOpen(false)}
+                title="Resolve Market"
+                confirmText="Resolve Market"
+                onConfirm={executeResolve}
+            >
+                {selectedPosition && (
+                    <div className="space-y-4">
+                        <p>Who won this market?</p>
+                        <p className="text-sm font-medium dark:text-white p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                            {selectedPosition.marketQuestion}
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => setResolutionOutcome('YES')}
+                                className={`p-4 rounded-xl border-2 font-bold transition-all ${resolutionOutcome === 'YES'
+                                    ? 'border-green-500 bg-green-50 text-green-700'
+                                    : 'border-zinc-200 text-zinc-400 hover:border-zinc-300'
+                                    }`}
+                            >
+                                YES 🏆
+                            </button>
+                            <button
+                                onClick={() => setResolutionOutcome('NO')}
+                                className={`p-4 rounded-xl border-2 font-bold transition-all ${resolutionOutcome === 'NO'
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : 'border-zinc-200 text-zinc-400 hover:border-zinc-300'
+                                    }`}
+                            >
+                                NO ❌
+                            </button>
+                        </div>
+                        <p className="text-xs text-zinc-400 text-center">
+                            This will payout all winners and close the market.
+                        </p>
+                    </div>
+                )}
+            </ActionModal>
+
+            {/* Position Details Modal */}
+            <ActionModal
+                isOpen={!!selectedPosition && !sellModalOpen && !resolveModalOpen}
+                onClose={() => setSelectedPosition(null)}
+                title="Position History"
+                confirmText="Close"
+                onConfirm={() => setSelectedPosition(null)}
+                isDestructive={false}
+            >
+                {selectedPosition && (
+                    <div className="space-y-4">
+                        <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700 mb-4">
+                            <h4 className="text-sm font-bold dark:text-white mb-1">{selectedPosition.marketQuestion}</h4>
+                            <div className="flex justify-between text-xs text-zinc-500">
+                                <span>Outcome: <span className="font-bold">{selectedPosition.outcome}</span></span>
+                                <span>Current Shares: {selectedPosition.shares}</span>
+                            </div>
+                        </div>
+
+                        <h5 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Recent Trades</h5>
+                        <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                            {trades
+                                .filter(t => t.marketId === selectedPosition.marketId && t.outcome === selectedPosition.outcome)
+                                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                                .map((t) => (
+                                    <div key={t.id} className="flex justify-between items-center text-sm p-2 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                                        <div className="flex flex-col">
+                                            <span className={`font-bold text-xs ${t.type === 'BUY' ? 'text-green-600' : 'text-blue-600'}`}>{t.type}</span>
+                                            <span className="text-xs text-zinc-400">{new Date(t.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-mono dark:text-white">${(t.amount || 0).toFixed(2)}</div>
+                                            <div className="text-[10px] text-zinc-400">@ ${(t.price * 100).toFixed(0)}¢</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            {trades.filter(t => t.marketId === selectedPosition.marketId).length === 0 && (
+                                <p className="text-center text-zinc-400 text-xs py-4">No history found.</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </ActionModal>
+
         </main>
     );
 }
